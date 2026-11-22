@@ -9,6 +9,7 @@ import urllib.request
 
 import pytest
 
+from brick_panel.demo import demo_feeds
 from brick_panel.demo import DemoWeather
 from brick_panel.metrics import Metrics
 from brick_panel.perf import Perf
@@ -18,10 +19,14 @@ from brick_panel.web import STATIC
 from brick_panel.web import static_file
 
 
+def make_panel(settings, feeds=None):
+    metrics = Metrics()
+    return Panel(settings, DemoWeather(), Perf(settings["perf"], metrics), metrics, feeds or {})
+
+
 @pytest.fixture
 def server(settings):
-    metrics = Metrics()
-    panel = Panel(settings, DemoWeather(), Perf(settings["perf"], metrics), metrics)
+    panel = make_panel(settings, demo_feeds())
     srv = serve(panel, "127.0.0.1", 0)
     yield f"http://127.0.0.1:{srv.server_address[1]}", panel
     srv.shutdown()
@@ -48,6 +53,17 @@ def test_state(server):
     assert state["weather"]["current"]["condition"] == "LIGHT RAIN"
     assert state["bench"] is None
     assert state["boot"]
+    assert state["alerts"]["condition"] == "YELLOW"
+    assert state["alerts"]["infra"][0]["text"] == "TARGET DOWN LCARS"
+    assert state["brick"]["overall"] == "warn"
+    assert set(state["feeds"]) == {"board", "prometheus", "overwatch"}
+
+
+def test_state_without_feeds(settings):
+    state = make_panel(settings).state()
+    assert state["brick"] is None
+    assert state["alerts"]["condition"] == "GREEN"  # the demo weather answered: no warnings
+    assert state["alerts"]["infra"] is None and state["alerts"]["watch"] is None
 
 
 def test_page_and_everything_it_loads(server):

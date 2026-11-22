@@ -23,6 +23,24 @@ weather:
   point: ""
   poll_seconds: 300
 
+feeds:
+  # The homelab's pages the panel reads. An empty url turns one off (its
+  # part of the screen says so). A feed's last answer is shown for
+  # stale_seconds after its source stops answering, then it reads OFFLINE.
+  stale_seconds: 300
+  sources:
+    # brick9000's board: the BRICK screen.
+    board:
+      url: https://status.brick.nozdormu.cloud/api/state
+      poll_seconds: 30
+    # Firing alerts and overwatch: the ALERTS screen, with the weather's warnings.
+    prometheus:
+      url: https://prometheus.brick.nozdormu.cloud/api/v1/alerts
+      poll_seconds: 30
+    overwatch:
+      url: https://overwatch.brick.nozdormu.cloud/api/state
+      poll_seconds: 30
+
 # The plus: Home in the middle, an app on each arm. Swap names to rearrange.
 plus:
   up: weather

@@ -8,7 +8,9 @@ import signal
 import threading
 
 from . import __version__
+from . import feeds as feeds_mod
 from . import settings as settings_mod
+from .demo import demo_feeds
 from .demo import DemoWeather
 from .metrics import Metrics
 from .perf import Perf
@@ -31,12 +33,14 @@ def main(argv: list[str] | None = None) -> None:
     metrics = Metrics()
     metrics.set("panel_info", 1, version=__version__)
     if args.demo:
-        weather = DemoWeather()
+        weather, feeds = DemoWeather(), demo_feeds()
     else:
         w = settings["weather"]
         weather = Weather(w["point"], w["poll_seconds"], metrics=metrics)
-    weather.start()
-    panel = Panel(settings, weather, Perf(settings["perf"], metrics), metrics)
+        feeds = feeds_mod.from_settings(settings, metrics)
+    for source in (weather, *feeds.values()):
+        source.start()
+    panel = Panel(settings, weather, Perf(settings["perf"], metrics), metrics, feeds)
     host = args.host or settings["server"]["host"]
     port = args.port or settings["server"]["port"]
     server = serve(panel, host, port)

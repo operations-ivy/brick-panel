@@ -14,14 +14,10 @@ const POLL_MS = 5000;
 // Where each arm lies from Home: [dx, dy] in screens.
 const ARM = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const OPPOSITE = { up: "down", down: "up", left: "right", right: "left" };
-const TITLES = { weather: "WEATHER", climate: "CLIMATE", lights: "LIGHTS", brick: "BRICK", alerts: "ALERTS",
-  calendar: "CALENDAR", shopping: "SHOPPING" };
 // What each screen will hold, until its PR lands.
 const COMING = {
   climate: "The thermostat: set point, mode and the room, behind the PIN and the lock key.",
   lights: "Home Assistant's lights: on, off and brightness.",
-  brick: "The homelab: nodes, the cluster, the network and the front door.",
-  alerts: "Prometheus' alerts, overwatch and the weather service's warnings.",
   calendar: "The household calendar: today, then the weeks ahead.",
   shopping: "The shopping list: tick things off, see what's left.",
 };
@@ -155,9 +151,7 @@ function hintsFor(name) {
   if (name === "home") {
     return Object.entries(plus).map(([dir, arm]) => ({ dir, text: TITLES[arm] || arm.toUpperCase(), cls: "" }));
   }
-  const place = placeOf(name);
-  const dir = place === "billboard" ? "down" : OPPOSITE[place] || "down";
-  return [{ dir, text: "HOME", cls: "home" }];
+  return [{ dir: backOf(name), text: "HOME", cls: "home" }];
 }
 
 function drawHints() {
@@ -211,18 +205,6 @@ stage.addEventListener("contextmenu", (e) => e.preventDefault());
 
 // ---- Rendering ----
 
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
-
-function deg(t) {
-  return t === null || t === undefined ? "--°" : `${Math.round(t)}°`;
-}
-
-function setText(el, text) {
-  if (el.textContent !== text) el.textContent = text;
-}
-
 let lastMinute = "";
 function renderClock(force) {
   const now = new Date();
@@ -254,11 +236,6 @@ function glitchSoon() {
   }, 20000 + Math.random() * 10000);
 }
 
-function isNight() {
-  const h = new Date().getHours();
-  return h < 7 || h >= 18;
-}
-
 function renderHome() {
   const w = state.weather || {};
   const cur = w.current || {};
@@ -270,63 +247,38 @@ function renderHome() {
   if (nextEl.innerHTML !== nextHtml) nextEl.innerHTML = nextHtml;
   Scene.weather(home, cur.condition || (next && next.forecast) || "", isNight());
 
-  const alerts = (w.alerts || []).length;
   for (const b of home.querySelectorAll(".billboard")) {
     const val = b.querySelector(".val");
     if (b.dataset.open === "alerts") {
-      setText(val, alerts ? `${alerts} ACTIVE` : "ALL CLEAR");
-      b.classList.toggle("lit", alerts > 0);
+      const { text, lit } = alertsBillboard(state);
+      setText(val, text);
+      b.classList.toggle("lit", lit);
     } else {
       setText(val, b.dataset.open === "calendar" ? "AGENDA" : "LIST");
     }
   }
 }
 
-function appShell(name, kicker) {
-  const el = screens[name];
-  if (el.dataset.built) return el;
-  el.style.setProperty("--c", `var(${Scene.COLOURS[name] || "--cyan"})`);
-  el.innerHTML = `<div class="app-head"><div class="kicker">${esc(kicker)}</div><h1>${TITLES[name]}</h1></div>
-    <div class="app-body"></div>`;
-  el.dataset.built = "1";
-  return el;
+// The edge a screen's HOME arrow is on.
+function backOf(name) {
+  const place = placeOf(name);
+  return place === "billboard" ? "down" : OPPOSITE[place] || "down";
 }
 
 function renderComing(name) {
-  const el = appShell(name, "BRICK//1982 // " + (placeOf(name) === "billboard" ? "BILLBOARD" : "ARM"));
-  const body = el.querySelector(".app-body");
-  if (body.dataset.done) return;
-  body.innerHTML = `<div class="panel-box"><span class="tab">STANDBY</span><div class="body soon">
-    ${esc(COMING[name] || "")}<br><br><b>// NOT WIRED UP YET</b></div></div>`;
-  body.dataset.done = "1";
-}
-
-function renderWeather() {
-  const el = appShell("weather", "OUTSIDE // " + ((state.weather && state.weather.source) || "NO SOURCE").toString().toUpperCase());
-  const w = state.weather || {};
-  const cur = w.current || {};
-  const periods = (w.periods || []).slice(0, 4);
-  const meta = [cur.humidity != null ? `${Math.round(cur.humidity)}% RH` : null,
-    cur.wind_mph != null ? `WIND ${cur.wind_from || ""} ${Math.round(cur.wind_mph)} MPH` : null].filter(Boolean).join(" // ");
-  const age = w.age != null ? Math.round(w.age / 60) : null;
-  const html = `
-    <div class="panel-box"><span class="tab">NOW</span><div class="body wx-now">
-      <div class="big">${deg(cur.temperature)}</div>
-      <div class="what"><div class="cond">${esc(cur.condition || w.error || "NO SIGNAL")}</div>
-        <div class="meta">${esc(meta)}</div></div></div></div>
-    <div class="wx-periods">${periods.map((p) => `
-      <div class="wx-period ${p.day ? "day" : "night"}"><div class="name">${esc(p.name)}</div>
-        <div class="t">${deg(p.temperature)}</div><div class="f">${esc(p.forecast)}</div>
-        <div class="r">${p.rain != null ? `RAIN ${p.rain}%` : "&nbsp;"}</div></div>`).join("")}</div>
-    <div class="wx-foot">${age != null ? `UPDATED ${age} MIN AGO` : ""}</div>`;
-  const body = el.querySelector(".app-body");
-  if (body.innerHTML !== html) body.innerHTML = html;
+  const place = placeOf(name);
+  const shell = appShell(screens[name], name, backOf(name));
+  setText(shell.kicker, "BRICK//1982 // " + (place === "billboard" ? "BILLBOARD" : "ARM"));
+  paint(shell.body, `<div class="panel-box"><span class="tab">STANDBY</span><div class="body soon">
+    ${esc(COMING[name] || "")}<br><br><b>// NOT WIRED UP YET</b></div></div>`);
 }
 
 function render() {
   if (!state) return;
   renderHome();
-  renderWeather();
+  renderWeather(screens.weather, state, backOf("weather"));
+  renderBrick(screens.brick, state, backOf("brick"));
+  renderAlerts(screens.alerts, state, backOf("alerts"));
   for (const name of Object.keys(COMING)) renderComing(name);
 }
 

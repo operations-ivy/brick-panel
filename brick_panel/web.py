@@ -2,7 +2,8 @@
 
 GET  /                the page (static/index.html)
 GET  /static/<file>   its CSS, scripts and fonts
-GET  /api/state       everything the screens show, plus a pending bench run
+GET  /api/state       everything the screens show (the weather, the alert
+                      condition, the homelab), plus a pending bench run
 POST /api/perf        a screen change's frame times
 POST /api/bench       ask the page for a bench run (this Pi only); GET: the last result
 POST /api/bench/<id>  the page's frames for that run
@@ -18,6 +19,7 @@ import threading
 import time
 from dataclasses import asdict
 from dataclasses import dataclass
+from dataclasses import field
 from http.server import BaseHTTPRequestHandler
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -25,9 +27,14 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from . import __version__
+from .homelab import alerts_view
+from .homelab import brick_view
+from .homelab import weather_alerts
 
 if TYPE_CHECKING:
     from .demo import DemoWeather
+    from .feeds import DemoFeed
+    from .feeds import JsonFeed
     from .metrics import Metrics
     from .perf import Perf
     from .weather import Weather
@@ -56,11 +63,11 @@ def static_file(path: str) -> Path | None:
     return target
 
 
-def weather_state(weather) -> dict:
+def weather_state(weather, alerts: list[dict] | None) -> dict:
     return {
         "current": weather.current(),
         "periods": weather.periods(),
-        "alerts": weather.alerts(),
+        "alerts": weather_alerts(alerts),
         "age": weather.age(),
         "source": getattr(weather.source, "name", weather.source),
         "error": weather.error,
@@ -75,20 +82,30 @@ class Panel:
     weather: Weather | DemoWeather
     perf: Perf
     metrics: Metrics
+    feeds: dict[str, JsonFeed | DemoFeed] = field(default_factory=dict)
 
     def screens(self) -> list[str]:
         return ["home", *self.settings["plus"].values(), *self.settings["billboards"]]
 
+    def feed(self, name: str) -> object:
+        """A feed's last answer while it's fresh, else None (also when it's off)."""
+        f = self.feeds.get(name)
+        return f.fresh() if f is not None else None
+
     def state(self) -> dict:
-        s = self.settings
+        s, now = self.settings, time.time()
+        warnings = self.weather.alerts()  # once, so WEATHER and ALERTS agree
         return {
             "boot": BOOT,
-            "now": time.time(),
+            "now": now,
             "clock": s["clock"],
             "plus": s["plus"],
             "billboards": s["billboards"],
             "perf": {"budget_ms": self.perf.budget, "late_ms": self.perf.late_after},
-            "weather": weather_state(self.weather),
+            "weather": weather_state(self.weather, warnings),
+            "alerts": alerts_view(self.feed("prometheus"), self.feed("overwatch"), warnings, now),
+            "brick": brick_view(self.feed("board")),
+            "feeds": {name: f.age() for name, f in self.feeds.items()},
             "bench": asdict(run) if (run := self.perf.pending()) else None,
         }
 
