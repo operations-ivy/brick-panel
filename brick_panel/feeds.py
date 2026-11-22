@@ -36,7 +36,7 @@ class JsonFeed(threading.Thread):
         self._stopping = threading.Event()
         self._lock = threading.Lock()
         self._data: object = None
-        self.updated: float | None = None  # clock() of the last answer
+        self._updated: float | None = None  # clock() of the last answer
         self._warned = False
         if metrics:
             metrics.set("panel_feed_up", 0, feed=name)
@@ -47,12 +47,17 @@ class JsonFeed(threading.Thread):
             return self._data
 
     def age(self) -> float | None:
-        return None if self.updated is None else self.clock() - self.updated
+        with self._lock:
+            updated = self._updated
+        return None if updated is None else self.clock() - updated
 
     def fresh(self) -> object:
         """The last answer, or None if there's none or it's too old to trust."""
-        age = self.age()
-        return self.data if age is not None and age <= self.stale_seconds else None
+        with self._lock:  # the answer and its time together
+            data, updated = self._data, self._updated
+        if updated is None or self.clock() - updated > self.stale_seconds:
+            return None
+        return data
 
     def poll(self) -> bool:
         request = urllib.request.Request(self.url, headers={"Accept": "application/json", "User-Agent": USER_AGENT})
@@ -66,8 +71,8 @@ class JsonFeed(threading.Thread):
             self._count(up=False)
             return False
         with self._lock:
-            self._data = data
-        self.updated, self._warned = self.clock(), False
+            self._data, self._updated = data, self.clock()
+        self._warned = False
         self._count(up=True)
         return True
 
@@ -93,7 +98,7 @@ class DemoFeed:
         self.updated = time.time()
 
     def age(self) -> float:
-        return 12.0
+        return time.time() - self.updated
 
     def fresh(self) -> object:
         return self.data

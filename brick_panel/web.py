@@ -63,11 +63,11 @@ def static_file(path: str) -> Path | None:
     return target
 
 
-def weather_state(weather) -> dict:
+def weather_state(weather, alerts: list[dict] | None) -> dict:
     return {
         "current": weather.current(),
         "periods": weather.periods(),
-        "alerts": weather_alerts(weather.alerts()),
+        "alerts": weather_alerts(alerts),
         "age": weather.age(),
         "source": getattr(weather.source, "name", weather.source),
         "error": weather.error,
@@ -90,11 +90,11 @@ class Panel:
     def feed(self, name: str) -> object:
         """A feed's last answer while it's fresh, else None (also when it's off)."""
         f = self.feeds.get(name)
-        return f.fresh() if f else None
+        return f.fresh() if f is not None else None
 
     def state(self) -> dict:
         s, now = self.settings, time.time()
-        weather = weather_state(self.weather)
+        warnings = self.weather.alerts()  # once, so WEATHER and ALERTS agree
         return {
             "boot": BOOT,
             "now": now,
@@ -102,8 +102,8 @@ class Panel:
             "plus": s["plus"],
             "billboards": s["billboards"],
             "perf": {"budget_ms": self.perf.budget, "late_ms": self.perf.late_after},
-            "weather": weather,
-            "alerts": alerts_view(self.feed("prometheus"), self.feed("overwatch"), self.weather.alerts(), now),
+            "weather": weather_state(self.weather, warnings),
+            "alerts": alerts_view(self.feed("prometheus"), self.feed("overwatch"), warnings, now),
             "brick": brick_view(self.feed("board")),
             "feeds": {name: f.age() for name, f in self.feeds.items()},
             "bench": asdict(run) if (run := self.perf.pending()) else None,

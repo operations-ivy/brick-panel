@@ -18,16 +18,13 @@ class Clock:
 
 def opener(answers):
     """urlopen that returns (or raises) the next answer each call."""
-    calls = []
 
     def open_(request, timeout):
-        calls.append(request.full_url)
         answer = answers.pop(0)
         if isinstance(answer, Exception):
             raise answer
         return io.BytesIO(json.dumps(answer).encode())
 
-    open_.calls = calls
     return open_
 
 

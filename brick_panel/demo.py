@@ -45,38 +45,37 @@ class DemoWeather:
         pass
 
 
+def _check(group: str, name: str, detail: str, state: str = "ok") -> dict:
+    return {"group": group, "name": name, "state": state, "detail": detail}
+
+
 def demo_feeds() -> dict[str, DemoFeed]:
     """A homelab with something to show on every screen: a warning on the
     board, one firing alert, overwatch learning."""
     now = time.time()
-    check = lambda group, name, detail, state="ok": {  # noqa: E731
-        "group": group,
-        "name": name,
-        "state": state,
-        "detail": detail,
-    }
     board = {
         "overall": "warn",
         "groups": {
             "cluster": {
                 "state": "warn",
                 "checks": [
-                    check("cluster", "brick420", "Ready"),
-                    check("cluster", "brick666", "Ready"),
-                    check("cluster", "brick2000", "Ready"),
-                    check("cluster", "control plane", "API up"),
-                    check("cluster", "scrape lcars", "down 4m", "warn"),
+                    _check("cluster", "brick420", "Ready"),
+                    _check("cluster", "brick666", "Ready"),
+                    _check("cluster", "brick2000", "Ready"),
+                    _check("cluster", "control plane", "API up"),
+                    _check("cluster", "scrape lcars", "down 4m", "warn"),
                 ],
             },
-            "builds": {"state": "ok", "checks": [check("builds", f"job-{i}", "passed") for i in range(18)]},
-            "argocd": {"state": "ok", "checks": [check("argocd", "apps", "22/22 synced and healthy")]},
+            "builds": {"state": "ok", "checks": [_check("builds", f"job-{i}", "passed") for i in range(18)]},
+            "argocd": {"state": "ok", "checks": [_check("argocd", "apps", "22/22 synced and healthy")]},
             "services": {
                 "state": "ok",
                 "checks": [
-                    check("services", h, "no failed units") for h in ("brick9000", "brick1982", "brick2000", "brick420")
+                    _check("services", h, "no failed units")
+                    for h in ("brick9000", "brick1982", "brick2000", "brick420")
                 ],
             },
-            "wigle": {"state": "ok", "checks": [check("wigle", "last sync", "OK, 3h ago")]},
+            "wigle": {"state": "ok", "checks": [_check("wigle", "last sync", "OK, 3h ago")]},
         },
         "vitals": [
             {"node": "brick420", "cpu": 4.5, "mem": 25.7, "temp": 48.0, "disk": 38.5, "temp_warn": False},

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from datetime import timezone
+from datetime import UTC
+
+import pytest
 
 from brick_panel import homelab
 
@@ -66,7 +68,7 @@ def test_overwatch_feeds_and_recent():
 
 
 def test_weather_alerts_worst_first_with_timestamps():
-    ends = datetime(2026, 11, 23, 6, 0, tzinfo=timezone.utc)
+    ends = datetime(2026, 11, 23, 6, 0, tzinfo=UTC)
     out = homelab.weather_alerts(
         [
             {"event": "WIND ADVISORY", "severity": "Moderate", "ends": None},
@@ -78,17 +80,25 @@ def test_weather_alerts_worst_first_with_timestamps():
     assert homelab.weather_alerts(None) is None
 
 
-def test_condition():
-    green = {"feeds": [{"severity": 0}], "recent": []}
-    assert homelab.condition(None, None, None) == "UNKNOWN"
-    assert homelab.condition([], None, None) == "GREEN"
-    assert homelab.condition([{"severity": "warning"}], green, []) == "YELLOW"
-    assert homelab.condition([{"severity": "critical"}], green, []) == "RED"
-    assert homelab.condition([], {"feeds": [{"severity": 2}], "recent": []}, []) == "YELLOW"
-    assert homelab.condition([], {"feeds": [], "recent": [{"live": True}]}, []) == "RED"
-    assert homelab.condition([], None, [{"severity": "Severe"}]) == "YELLOW"
-    assert homelab.condition([], None, [{"severity": "Extreme"}]) == "RED"
-    assert homelab.condition([], None, [{"severity": "Minor"}]) == "GREEN"
+GREEN_WATCH = {"feeds": [{"severity": 0}], "recent": []}
+
+
+@pytest.mark.parametrize(
+    ("infra", "watch", "weather", "expected"),
+    [
+        (None, None, None, "UNKNOWN"),
+        ([], None, None, "GREEN"),
+        ([{"severity": "warning"}], GREEN_WATCH, [], "YELLOW"),
+        ([{"severity": "critical"}], GREEN_WATCH, [], "RED"),
+        ([], {"feeds": [{"severity": 2}], "recent": []}, [], "YELLOW"),
+        ([], {"feeds": [], "recent": [{"live": True}]}, [], "RED"),
+        ([], None, [{"severity": "Severe"}], "YELLOW"),
+        ([], None, [{"severity": "Extreme"}], "RED"),
+        ([], None, [{"severity": "Minor"}], "GREEN"),
+    ],
+)
+def test_condition(infra, watch, weather, expected):
+    assert homelab.condition(infra, watch, weather) == expected
 
 
 def test_alerts_view_counts_what_needs_a_look():
@@ -133,6 +143,6 @@ def test_brick_view():
 
 def test_brick_view_odd_states_and_no_board():
     assert homelab.brick_view(None) is None
-    view = homelab.brick_view({"overall": "weird", "groups": {}})
+    view = homelab.brick_view({"overall": "weird", "groups": {"x": "not a group"}, "vitals": ["junk"]})
     assert view["overall"] == "unknown"
     assert view["groups"] == [] and view["vitals"] == []

@@ -19,10 +19,14 @@ from brick_panel.web import STATIC
 from brick_panel.web import static_file
 
 
+def make_panel(settings, feeds=None):
+    metrics = Metrics()
+    return Panel(settings, DemoWeather(), Perf(settings["perf"], metrics), metrics, feeds or {})
+
+
 @pytest.fixture
 def server(settings):
-    metrics = Metrics()
-    panel = Panel(settings, DemoWeather(), Perf(settings["perf"], metrics), metrics, demo_feeds())
+    panel = make_panel(settings, demo_feeds())
     srv = serve(panel, "127.0.0.1", 0)
     yield f"http://127.0.0.1:{srv.server_address[1]}", panel
     srv.shutdown()
@@ -56,9 +60,7 @@ def test_state(server):
 
 
 def test_state_without_feeds(settings):
-    metrics = Metrics()
-    panel = Panel(settings, DemoWeather(), Perf(settings["perf"], metrics), metrics)
-    state = panel.state()
+    state = make_panel(settings).state()
     assert state["brick"] is None
     assert state["alerts"]["condition"] == "GREEN"  # the demo weather answered: no warnings
     assert state["alerts"]["infra"] is None and state["alerts"]["watch"] is None
