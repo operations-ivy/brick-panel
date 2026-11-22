@@ -1,0 +1,20 @@
+# System unit: installed to /etc/systemd/system/ by deploy/install.sh. The
+# panel's server: the page, its data, /metrics and /room.json on :8767 (the
+# port LCARS used, so Prometheus' job keeps its target). One panel at a time:
+# deploy/panel-select switches between this and LCARS.
+[Unit]
+Description=brick-panel server (the neon panel's page and data)
+After=network-online.target
+Wants=network-online.target
+Conflicts=lcars-kiosk.service
+
+[Service]
+User=zaphod
+Environment=PYTHONUNBUFFERED=1 PYTHONPATH=/home/zaphod/brick-panel
+EnvironmentFile=-/home/zaphod/.config/brick-panel/env
+ExecStart=/usr/bin/python3 -m brick_panel
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

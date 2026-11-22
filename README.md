@@ -1,0 +1,121 @@
+# brick-panel
+
+brick1982's neon wall panel: the 7" Raspberry Pi touchscreen in the bedroom,
+in portrait (480x800, the panel turned 90 degrees clockwise). It's the full
+version of the [Presto](https://github.com/operations-ivy/presto)'s neon desk
+display, in the look of brick9000's board and brick-games. It replaces the
+LCARS panel ([rpi_lcars](https://github.com/operations-ivy/rpi_lcars)), which
+stays installed; `panel-select` switches between them.
+
+A small Python server on the Pi serves the page and its data. Chromium shows
+it full screen under cage. Everything runs on the Pi itself, not on k3s: a
+bedroom alerts panel has to keep working when the cluster it watches is down,
+and it holds the panel's own sensor, PIN and Home Assistant token.
+
+## The plus
+
+```
+                 [ WEATHER ]
+                      ^
+  [ BRICK ]  <    [ HOME ]    >  [ CLIMATE ]
+                      v
+                  [ LIGHTS ]
+```
+
+Home is a rainy neon city at night: a neon-tube clock that glitches every
+20-30 s, the date, the forecast, and a skyline whose weather follows the real
+one (rain when it rains, stars on a clear night). Three rooftop billboards
+open **ALERTS**, **CALENDAR** and **SHOPPING**. Arms and billboards are
+settings (`plus`, `billboards`).
+
+| Touch | Does |
+| --- | --- |
+| On Home, tap an edge (its green arrow) | slides to that arm's screen |
+| On Home, tap a billboard | zooms into its screen |
+| Elsewhere, tap the edge with the HOME arrow | back to Home |
+| Two-finger tap | Home, from anywhere |
+
+Built so far: Home, WEATHER and the navigation. CLIMATE, LIGHTS, BRICK,
+ALERTS, CALENDAR and SHOPPING come next (their screens say so for now). There
+is no slideshow, and won't be: no photos on brick1982 (the user, 2026-11-22).
+
+## Smooth screen changes
+
+Smooth screen changes are the first requirement, so the page is built around them:
+
+- Only `transform` and `opacity` animate (Web Animations API), so the
+  compositor moves screens without layout or paint.
+- Every screen is its own layer, always painted and stacked under the live
+  one. A change never waits for a first paint, and covered screens' animations are paused.
+- Home's skyline is painted once into a canvas. Rain, stars, windows and the
+  flying car are static layers moved by CSS animations, so the main thread
+  draws nothing per frame.
+- The page times every frame of every screen change and posts them to
+  `/api/perf`. They show up in Prometheus as `panel_transitions_total{result="smooth|janky"}`
+  and `panel_transition_frames_total{result="on_time|late"}`. A frame over
+  `frame_budget_ms x late_factor` (25 ms) missed a vsync.
+- `deploy/bench` runs on brick1982 with the panel showing. It drives the
+  page round the plus and through every billboard three times, then fails if
+  the p95 frame is over 20 ms or over 5% of frames are late. First run on
+  brick1982 (Pi 4, Chromium 154): 731 frames, p95 16.7 ms, worst 16.8 ms,
+  0 late.
+
+## Settings
+
+`brick_panel/defaults.yaml` lists every setting with its default. A panel
+changes one by putting just that key in `~/.config/brick-panel/settings.yaml`
+(not in git), which is merged over the defaults. The weather's `point`
+(where the panel is) only ever goes there.
+
+```yaml
+weather:
+  point: "lat,lon"
+kiosk:
+  rotation: 270   # if the panel is turned the other way
+```
+
+`python3 -m brick_panel.settings kiosk.rotation` prints one value.
+
+## On a laptop
+
+```
+poetry install
+poetry run python -m brick_panel --demo --port 8799 --host 127.0.0.1
+```
+
+Open `http://127.0.0.1:8799/` in a 480x800 window. `--demo` uses made-up
+weather. To open a screen directly, add its name as a hash, like
+`http://127.0.0.1:8799/#weather`. Tests: `poetry run pytest`.
+Style: `poetry run pre-commit run --all-files`.
+
+## On brick1982
+
+```
+git clone https://github.com/operations-ivy/brick-panel.git ~/brick-panel
+~/brick-panel/deploy/install.sh     # installs, doesn't switch
+panel-select neon                   # or: panel-select lcars
+~/brick-panel/deploy/bench          # are screen changes smooth?
+```
+
+- `brick-panel.service` is the server, on :8767, the port LCARS used, so
+  Prometheus' job keeps its target.
+- `brick-panel-kiosk.service` runs cage on tty1 and `deploy/kiosk`. That
+  script turns the output with `wlr-randr --transform` (touch follows) and
+  starts Chromium with GPU raster.
+- `panel-select` switches between the neon panel and LCARS. Only one runs at
+  a time, and only that panel's deploy timer is on.
+- `brick-panel-deploy.timer` (a user unit, every 2 hours) follows
+  `deploy.branch` (`main` by default). It tests the new commit in a scratch
+  worktree, switches only if the tests pass, and restarts the server. The
+  page sees the server's new start and reloads itself. Rerun
+  `deploy/install.sh` after a change under `deploy/`.
+- Screenshot over ssh:
+  `XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 grim /tmp/x.png`.
+
+## Style
+
+`static/theme.css` is the homelab's neon look in one file: the Presto's
+palette merged with brick-status and brick-games', and the VT323 and
+Silkscreen fonts, bundled (OFL, licences in `static/fonts/`). Square
+corners, neon glows, the magenta/cyan glitch split, scanlines, and TV static
+on a billboard zoom.

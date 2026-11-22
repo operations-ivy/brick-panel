@@ -1,0 +1,48 @@
+# brick-panel's settings. Change one on a panel by putting just that key in
+# ~/.config/brick-panel/settings.yaml (not in git): it's merged over these.
+
+server:
+  # The page, its state and /metrics (Prometheus' job, as LCARS' was).
+  host: 0.0.0.0
+  port: 8767
+
+kiosk:
+  # The panel's output and its rotation, as wlr-randr's --transform. The 7"
+  # panel is 800x480; turned 90 degrees clockwise on the wall it needs the
+  # picture turned 90 the other way, which is Wayland's "90". Use 270 if the
+  # panel is turned the other way.
+  output: DSI-1
+  rotation: 90
+
+clock:
+  hours: 12  # or 24
+
+weather:
+  # "lat,lon" for the forecast. Where the panel is, so only in the panel's own
+  # settings file, never here.
+  point: ""
+  poll_seconds: 300
+
+# The plus: Home in the middle, an app on each arm. Swap names to rearrange.
+plus:
+  up: weather
+  right: climate
+  down: lights
+  left: brick
+
+# Home's rooftop billboards, left to right; each opens its screen.
+billboards: [alerts, calendar, shopping]
+
+perf:
+  # A frame later than budget x late_factor is late (one missed vsync).
+  frame_budget_ms: 16.7
+  late_factor: 1.5
+  # deploy/bench fails over either of these.
+  bench_p95_ms: 20
+  bench_late_ratio: 0.05
+  bench_rounds: 3
+
+deploy:
+  # The branch deploy/deploy follows. Point it at a branch to try that on
+  # the real panel; set it back to main after merging.
+  branch: main

@@ -1,0 +1,32 @@
+# System unit: installed to /etc/systemd/system/ by deploy/install.sh. cage
+# (a single-window Wayland compositor) on tty1 runs deploy/kiosk: the panel
+# turned to portrait and Chromium full screen on brick-panel.service's page.
+[Unit]
+Description=brick-panel kiosk (cage + Chromium) on tty1
+After=systemd-user-sessions.service plymouth-quit-wait.service brick-panel.service
+Wants=brick-panel.service
+Conflicts=getty@tty1.service lcars-kiosk.service brick-kiosk.service
+After=getty@tty1.service
+
+[Service]
+User=zaphod
+PAMName=login
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+Environment=XDG_SESSION_TYPE=wayland
+# A transparent cursor theme (deploy/blank-cursors): the touchscreen counts as
+# a pointer, so cage would otherwise draw an arrow on the panel.
+Environment=XCURSOR_PATH=/usr/local/share/brick-panel/cursors XCURSOR_THEME=default
+ExecStart=/usr/bin/cage -d -- /home/zaphod/brick-panel/deploy/kiosk
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target
