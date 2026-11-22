@@ -7,7 +7,15 @@ GET  /api/state       everything the screens show (the weather, the alert
 POST /api/perf        a screen change's frame times
 POST /api/bench       ask the page for a bench run (this Pi only); GET: the last result
 POST /api/bench/<id>  the page's frames for that run
+POST /api/unlock      {"code"}: open the panel lock; /api/secure closes it,
+                      /api/touch keeps it open (a tap on the panel)
+POST /api/climate     {"setpoints": {...}} or {"mode"}: the thermostat
+POST /api/light       {"entity", "on", "pct"?}: a light
+GET  /room.json       the room sensor's reading, for Home Assistant
 GET  /metrics         Prometheus
+
+Every POST that changes something is for the panel's own page only (this
+Pi): from anywhere else it's refused, whatever it carries.
 """
 
 from __future__ import annotations
@@ -32,6 +40,7 @@ from .homelab import brick_view
 from .homelab import weather_alerts
 
 if TYPE_CHECKING:
+    from .controls import Controls
     from .demo import DemoWeather
     from .feeds import DemoFeed
     from .feeds import JsonFeed
@@ -46,6 +55,8 @@ BOOT = f"{__version__}-{time.time():.0f}"
 mimetypes.add_type("font/woff2", ".woff2")
 mimetypes.add_type("text/javascript", ".js")
 MAX_BODY = 1 << 20
+CONTROLS = {"/api/unlock", "/api/secure", "/api/touch", "/api/climate", "/api/light"}
+LOCAL_ONLY = {"/api/bench", *CONTROLS}
 
 
 def is_loopback(client: str) -> bool:
@@ -61,6 +72,25 @@ def static_file(path: str) -> Path | None:
     if STATIC not in target.parents or not target.is_file():
         return None
     return target
+
+
+def control(controls: Controls, path: str, body: dict) -> dict:
+    """One control request; the answer always carries the lock's state."""
+    if path == "/api/unlock":
+        return controls.unlock(body.get("code"))
+    if path == "/api/secure":
+        return controls.secure()
+    if path == "/api/touch":
+        controls.touch()
+        return controls.lock_view()
+    if path == "/api/climate":
+        if "mode" in body:
+            ok, why = controls.set_mode(body["mode"])
+        else:
+            ok, why = controls.set_setpoints(body.get("setpoints"))
+    else:
+        ok, why = controls.set_light(body.get("entity"), body.get("on"), body.get("pct"))
+    return {"ok": ok, "why": why, **controls.lock_view()}
 
 
 def weather_state(weather, alerts: list[dict] | None) -> dict:
@@ -83,6 +113,7 @@ class Panel:
     perf: Perf
     metrics: Metrics
     feeds: dict[str, JsonFeed | DemoFeed] = field(default_factory=dict)
+    controls: Controls | None = None
 
     def screens(self) -> list[str]:
         return ["home", *self.settings["plus"].values(), *self.settings["billboards"]]
@@ -106,6 +137,7 @@ class Panel:
             "alerts": alerts_view(self.feed("prometheus"), self.feed("overwatch"), warnings, now),
             "brick": brick_view(self.feed("board")),
             "feeds": {name: f.age() for name, f in self.feeds.items()},
+            "home": self.controls.view() if self.controls else None,
             "bench": asdict(run) if (run := self.perf.pending()) else None,
         }
 
@@ -122,6 +154,11 @@ def handler(panel: Panel):
                 return self.send_json(panel.state())
             if path == "/api/bench":
                 return self.send_json(asdict(panel.perf.last_bench) if panel.perf.last_bench else {})
+            if path == "/room.json":
+                room = panel.controls and panel.controls.room
+                if not room:
+                    return self.send(404, b"no room sensor\n", "text/plain")
+                return self.send_json(room.document())
             if path == "/metrics":
                 return self.send(200, panel.metrics.render().encode(), "text/plain; version=0.0.4")
             if path == "/":
@@ -149,10 +186,14 @@ def handler(panel: Panel):
                     for name in panel.screens():
                         panel.metrics.set("panel_screen", 1 if name == screen else 0, screen=name)
                 return self.send_json({"smooth": smooth})
+            if path in LOCAL_ONLY and not is_loopback(self.client_address[0]):
+                return self.send(403, b"only the panel itself can do that\n", "text/plain")
             if path == "/api/bench":
-                if not is_loopback(self.client_address[0]):
-                    return self.send(403, b"bench runs are asked for on the panel itself\n", "text/plain")
                 return self.send_json({"id": panel.perf.request_bench()})
+            if path in CONTROLS:
+                if panel.controls is None:
+                    return self.send(404, b"no controls on this panel\n", "text/plain")
+                return self.send_json(control(panel.controls, path, body))
             if path.startswith("/api/bench/"):
                 result = panel.perf.finish_bench(path.rsplit("/", 1)[1], body.get("frames") or [])
                 if result is None:

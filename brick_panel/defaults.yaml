@@ -41,6 +41,57 @@ feeds:
       url: https://overwatch.brick.nozdormu.cloud/api/state
       poll_seconds: 30
 
+home_assistant:
+  # CLIMATE and LIGHTS. The token is the Panel user's long-lived token (as
+  # LCARS'), so only in the panel's own settings file, never here. Empty: the
+  # two screens say NO TOKEN.
+  url: https://homeassistant.brick.nozdormu.cloud
+  token: ""
+  poll_seconds: 5
+
+climate:
+  thermostat: climate.thermostat
+  # Show the thermostat, never change it: no keypad, no calls go out.
+  read_only: false
+  # The code that opens the controls (CLIMATE and LIGHTS). Only in the
+  # panel's own settings file. Empty: only Home Assistant can open them
+  # (lock_entity: unlocked).
+  pin: ""
+  # Back to locked after this long without a touch.
+  idle_relock_seconds: 120
+  # Wrong codes in a row before a lockout; the lockout doubles each time
+  # after, up to the maximum, until a right code.
+  misses_before_lockout: 3
+  lockout_seconds: 30
+  max_lockout_seconds: 600
+  # Shared with LCARS: normal, unlocked (no code needed) or hard_locked
+  # (even the right code is refused).
+  lock_entity: input_select.lcars_panel_lock
+  # Home Assistant's guardrails for the setpoints, and these until it answers.
+  setpoint_min_entity: input_number.thermostat_setpoint_min
+  setpoint_max_entity: input_number.thermostat_setpoint_max
+  default_guardrails: [64, 76]
+  # Auto keeps heat and cool at least this far apart.
+  heat_cool_gap: 5
+  # Taps gather this long before one call goes to Home Assistant.
+  send_after_seconds: 1.5
+
+lights:
+  # Home Assistant light entities and the names to show (empty: Home
+  # Assistant's names), in order.
+  entities: {}
+  step_pct: 10
+
+room:
+  # The SHT3x on the Pi's I2C bus: upstairs on CLIMATE, and /room.json for
+  # Home Assistant's sensor.bedroom_*. The Pi warms the air near it: offset
+  # (degrees F) corrects that, measured once against a thermometer.
+  sensor: false
+  i2c_bus: 1
+  i2c_address: 0x44
+  offset: 0
+  poll_seconds: 30
+
 # The plus: Home in the middle, an app on each arm. Swap names to rearrange.
 plus:
   up: weather

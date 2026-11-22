@@ -301,3 +301,104 @@ body {
 .condition.bad { --tone: var(--red); }
 .condition.bad .v { animation: blink 1.2s steps(2) infinite; }
 .condition.dim { --tone: var(--faint); box-shadow: none; }
+
+/* ---- Controls: CLIMATE, LIGHTS and the keypad ----
+   Buttons press with a transform (panel.js); a disabled one just dims. */
+
+.key {
+  font: inherit; font-family: var(--pixel); font-size: 13px; letter-spacing: 2px; color: var(--text);
+  background: var(--panel); border: 2px solid var(--kc, var(--edge)); cursor: none;
+  display: flex; align-items: center; justify-content: center; will-change: transform;
+}
+.key:disabled { opacity: .3; }
+.key.big { height: 56px; padding: 0 22px; font-size: 15px; letter-spacing: 3px; flex: none; }
+.key.unlock { --kc: var(--amber); color: var(--amber); box-shadow: 0 0 10px #ffb30055; }
+.key.secure { --kc: var(--red); color: var(--red); box-shadow: 0 0 10px #ff335555; }
+
+.lockbar { display: flex; align-items: center; gap: 16px; padding: 10px 0 0; border-top: 2px solid var(--edge); }
+.lockmsg { display: flex; flex-direction: column; min-width: 0; }
+.lockmsg b { font-family: var(--pixel); font-size: 12px; letter-spacing: 2px; font-weight: normal; }
+.lockmsg span { font-size: 20px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lockbar.ok b { color: var(--green); }
+.lockbar.warn b { color: var(--amber); }
+.lockbar.bad b { color: var(--red); }
+
+/* CLIMATE */
+.house { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.house .avg { display: flex; flex-direction: column; }
+.house .avg .v { font-size: 86px; line-height: .8; color: var(--text); text-shadow: 0 0 14px #dff6ff55; }
+.house .avg .k, .house .floors .k { font-family: var(--pixel); font-size: 9px; letter-spacing: 2px; color: var(--faint); }
+.house .avg .k { margin-top: 6px; }
+.house .floors { display: flex; flex-direction: column; gap: 2px; min-width: 150px; }
+.house .floors div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 22px; line-height: 24px; }
+.acting { margin-top: 10px; display: flex; align-items: center; gap: 8px; font-family: var(--pixel); font-size: 11px;
+  letter-spacing: 2px; color: var(--dim); white-space: nowrap; overflow: hidden; }
+.acting em { font-style: normal; color: var(--faint); }
+.acting .led { width: 9px; height: 9px; background: var(--faint); flex: none; }
+.acting.heat { color: var(--sodium); }
+.acting.heat .led { background: var(--sodium); box-shadow: 0 0 8px var(--sodium); animation: breathe 1.6s ease-in-out infinite; }
+.acting.cool { color: var(--cyan); }
+.acting.cool .led { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); animation: breathe 1.6s ease-in-out infinite; }
+
+.scale { margin: -4px 0 14px; }
+.scale .track { position: relative; height: 10px; background: linear-gradient(90deg, #ff9f1c33, #9d4edd22 50%, #00eaff33);
+  border: 1px solid var(--edge); }
+.scale .mark, .scale .here { position: absolute; top: -6px; width: 4px; height: 20px; margin-left: -2px; }
+.scale .mark.heat { background: var(--sodium); box-shadow: 0 0 8px var(--sodium); }
+.scale .mark.cool { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.scale .here { top: -3px; height: 14px; width: 2px; margin-left: -1px; background: #fff; }
+.scale .ends { display: flex; justify-content: space-between; margin-top: 4px; font-family: var(--pixel); font-size: 9px;
+  letter-spacing: 2px; color: var(--faint); }
+
+.panel-box.live { --c: var(--amber); }
+.setpoint { display: grid; grid-template-columns: 92px 1fr 92px; align-items: center; gap: 10px; margin-bottom: 10px; }
+.setpoint .arrow { height: 76px; --kc: var(--tone); color: var(--tone); }
+.setpoint.heat { --tone: var(--sodium); }
+.setpoint.cool { --tone: var(--cyan); }
+.setpoint .tri { width: 0; height: 0; border: 15px solid transparent; }
+.setpoint .tri.up { border-top-width: 0; border-bottom: 22px solid currentColor; }
+.setpoint .tri.down { border-bottom-width: 0; border-top: 22px solid currentColor; }
+.setpoint .arrow:disabled .tri { opacity: .5; }
+.setpoint .sp { display: flex; flex-direction: column; align-items: center; }
+.setpoint .sp .k { font-family: var(--pixel); font-size: 10px; letter-spacing: 2px; color: var(--tone); }
+.setpoint .sp .v { font-size: 64px; line-height: .95; color: var(--text); text-shadow: 0 0 10px var(--tone); }
+.setpoint .sp .v.flying { color: #fff; text-shadow: 0 0 6px #fff, 0 0 16px var(--tone); }
+.sp-note { height: 86px; display: flex; align-items: center; justify-content: center; font-family: var(--pixel);
+  font-size: 13px; letter-spacing: 2px; color: var(--dim); margin-bottom: 10px; }
+.modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.key.mode { height: 50px; }
+.key.mode.on { --kc: var(--amber); color: var(--void); background: var(--amber); }
+
+/* LIGHTS */
+.lights { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.light { background: var(--panel); border: 2px solid var(--edge); padding: 10px 12px 12px; }
+.light.on { border-color: #ffb30066; box-shadow: 0 0 12px #ffb30022; }
+.light .top { display: flex; justify-content: space-between; align-items: baseline; }
+.light .name { font-family: var(--pixel); font-size: 13px; letter-spacing: 2px; color: var(--text); }
+.light .st { font-size: 24px; color: var(--dim); }
+.light.on .st { color: var(--amber); text-shadow: var(--glow-amber); }
+.light.gone .st { color: var(--red); }
+.light .bar { margin: 8px 0 10px; height: 8px; --c: var(--amber); }
+.light .btns { display: grid; grid-template-columns: 70px 70px 1fr; gap: 8px; }
+.key.step { height: 52px; font-family: var(--term); font-size: 34px; letter-spacing: 0; }
+.key.toggle { height: 52px; font-size: 15px; letter-spacing: 3px; }
+.key.toggle.on { --kc: var(--amber); color: var(--void); background: var(--amber); }
+
+/* The keypad: over the screen's body, shown and hidden by opacity only. */
+.keypad {
+  position: absolute; top: 112px; left: 0; right: 0; bottom: 0; z-index: 5; padding: 18px 40px 0;
+  background: var(--void); visibility: hidden; pointer-events: none; will-change: transform, opacity;
+}
+.keypad.open { visibility: visible; pointer-events: auto; }
+.kp-head { font-family: var(--pixel); font-size: 15px; letter-spacing: 4px; color: var(--amber); text-shadow: var(--glow-amber); }
+.kp-dots { display: flex; gap: 10px; margin: 14px 0 8px; height: 18px; }
+.kp-dots i { width: 18px; height: 18px; border: 2px solid var(--edge); }
+.kp-dots i.on { background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.kp-msg { font-family: var(--pixel); font-size: 11px; letter-spacing: 2px; color: var(--cyan); height: 18px; margin-bottom: 12px; }
+.kp-msg.bad { color: var(--red); }
+.kp-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.kp-key { height: 82px; font-family: var(--term); font-size: 44px; letter-spacing: 0; --kc: #2e2a5c; }
+.kp-key.clear, .kp-key.enter { font-family: var(--pixel); font-size: 13px; letter-spacing: 2px; }
+.kp-key.clear { --kc: var(--red); color: var(--red); }
+.kp-key.enter { --kc: var(--green); color: var(--green); }
+.kp-cancel { margin-top: 14px; width: 100%; height: 52px; }

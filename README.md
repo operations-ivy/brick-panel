@@ -50,9 +50,37 @@ Built so far: Home, the navigation, and:
   LCARS' rules, so both panels agree. The billboard on Home shows how many
   things need a look.
 
-CLIMATE, LIGHTS, CALENDAR and SHOPPING come next (their screens say so for
-now). There is no slideshow, and won't be: no photos on brick1982 (the user,
+- **CLIMATE**: the house (the room sensor upstairs, the ecobee downstairs,
+  their average, the humidity), what the system is doing, the setpoints on
+  Home Assistant's guardrails, big arrows for the setpoint (two in auto,
+  kept the gap apart), and the modes.
+- **LIGHTS**: each light in `lights.entities` with its brightness, - and +,
+  and on/off.
+
+CALENDAR and SHOPPING come next (their screens say so for now). There is no slideshow, and won't be: no photos on brick1982 (the user,
 2026-11-22).
+
+## The controls and the lock
+
+CLIMATE and LIGHTS change things in Home Assistant, so they're locked, as
+LCARS' are (the same rules, `lock.py`). Looking is free; changing needs the
+code (`climate.pin`). The keypad's digits are shuffled every time it opens,
+so watching a hand teaches nothing. Three wrong codes lock the keypad out
+for 30 s, doubling each time up to 10 min. The panel relocks after 2 min
+without a touch, or at SECURE. Home Assistant's
+`input_select.lcars_panel_lock` overrides it on both panels: `unlocked`
+needs no code, `hard_locked` refuses even the right one. `climate.read_only`
+shows everything and changes nothing.
+
+The page decides nothing. Every change is a request to the server, which
+takes it only from the Pi itself (from anywhere else it's 403, whatever it
+carries), and only while the lock allows it. A setpoint must be one the
+thermostat's mode has, inside the guardrails, auto's pair at least
+`climate.heat_cool_gap` apart. A light must be one of the panel's. Taps show
+at once and gather for 1.5 s before one call goes to Home Assistant.
+
+`/room.json` serves the room sensor's reading for Home Assistant's
+`sensor.bedroom_*`, as LCARS' did.
 
 ## Smooth screen changes
 
@@ -74,7 +102,9 @@ Smooth screen changes are the first requirement, so the page is built around the
   the p95 frame is over 20 ms or over 5% of frames are late. First run on
   brick1982 (Pi 4, Chromium 154): 731 frames, p95 16.7 ms, worst 16.8 ms,
   0 late. With WEATHER, BRICK and ALERTS built (PR 2), three runs: 742, 737
-and 734 frames, the same p95 and worst, 0 late.
+and 734 frames, the same p95 and worst, 0 late. With CLIMATE and LIGHTS on
+live Home Assistant data (PR 3), six runs: p95 16.7 ms each time; one run
+had one dropped frame (33 ms, 0.3% late), the other five none.
 
 ## Settings
 
@@ -86,9 +116,20 @@ changes one by putting just that key in `~/.config/brick-panel/settings.yaml`
 ```yaml
 weather:
   point: "lat,lon"
+home_assistant:
+  token: "..."    # the Panel user's long-lived token
+climate:
+  pin: "..."
+lights:
+  entities:
+    light.lamp: Office
+room:
+  sensor: true
 kiosk:
   rotation: 270   # if the panel is turned the other way
 ```
+
+The token and the code only ever go in that file (mode 600), never in git.
 
 `python3 -m brick_panel.settings kiosk.rotation` prints one value.
 
@@ -107,7 +148,7 @@ poetry run python -m brick_panel --demo --port 8799 --host 127.0.0.1
 ```
 
 Open `http://127.0.0.1:8799/` in a 480x800 window. `--demo` uses made-up
-weather. To open a screen directly, add its name as a hash, like
+weather, homelab and Home Assistant (the code is 1982; it does what it's told). To open a screen directly, add its name as a hash, like
 `http://127.0.0.1:8799/#weather`. Tests: `poetry run pytest`.
 Style: `poetry run pre-commit run --all-files`.
 
