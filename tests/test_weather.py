@@ -211,7 +211,7 @@ def test_retries_sooner_then_backs_off():
     w = make(web)
     w.poll_seconds = 300
     waits = []
-    w._stop.wait = lambda seconds: (waits.append(seconds), len(waits) >= 5 and w._stop.set())
+    w._stopping.wait = lambda seconds: (waits.append(seconds), len(waits) >= 5 and w._stopping.set())
     w.run()
     assert waits == [60, 120, 240, 300, 300]
 

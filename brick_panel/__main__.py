@@ -47,8 +47,9 @@ def main(argv: list[str] | None = None) -> None:
     try:
         done.wait()
     except KeyboardInterrupt:
-        pass
-    server.shutdown()
+        pass  # Ctrl-C is a normal stop (--demo on a laptop)
+    finally:
+        server.shutdown()
 
 
 if __name__ == "__main__":

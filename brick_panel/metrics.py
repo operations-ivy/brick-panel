@@ -33,10 +33,17 @@ KNOWN = {
 }
 
 
-def _labels(labels: tuple) -> str:
+Labels = tuple[tuple[str, str], ...]
+
+
+def _escape(value: object) -> str:
+    return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+def _labels(labels: Labels) -> str:
     if not labels:
         return ""
-    return "{" + ",".join(f'{k}="{v}"' for k, v in labels) + "}"
+    return "{" + ",".join(f'{k}="{_escape(v)}"' for k, v in labels) + "}"
 
 
 class Metrics:
@@ -61,7 +68,8 @@ class Metrics:
             self._values[self._key(name, labels)] = value
 
     def get(self, name: str, **labels: str) -> float:
-        return self._values.get(self._key(name, labels), 0)
+        with self._lock:
+            return self._values.get(self._key(name, labels), 0)
 
     def render(self) -> str:
         with self._lock:

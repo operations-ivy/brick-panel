@@ -30,11 +30,18 @@ def main() -> int:
     p.add_argument("--timeout", type=float, default=180)
     args = p.parse_args()
     base = f"http://127.0.0.1:{args.port}"
-    run = call(base + "/api/bench", {})["id"]
+    try:
+        run = call(base + "/api/bench", {})["id"]
+    except OSError as e:
+        print(f"bench: the panel's server didn't answer on :{args.port}: {e}", file=sys.stderr)
+        return 2
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
         time.sleep(2)
-        result = call(base + "/api/bench")
+        try:
+            result = call(base + "/api/bench")
+        except OSError:
+            continue  # a restart mid-run; keep waiting until the deadline
         if result.get("id") == run:
             print(json.dumps(result, indent=1))
             verdict = "smooth" if result["passed"] else "NOT smooth"

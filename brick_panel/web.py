@@ -16,12 +16,21 @@ import json
 import mimetypes
 import threading
 import time
+from dataclasses import asdict
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from . import __version__
+
+if TYPE_CHECKING:
+    from .demo import DemoWeather
+    from .metrics import Metrics
+    from .perf import Perf
+    from .weather import Weather
 
 STATIC = (Path(__file__).parent / "static").resolve()
 # Changes every start, e.g. after a deploy: the page reloads itself when it
@@ -58,11 +67,14 @@ def weather_state(weather) -> dict:
     }
 
 
+@dataclass
 class Panel:
     """What the handlers need: settings, the data sources, perf and metrics."""
 
-    def __init__(self, settings: dict, weather, perf, metrics) -> None:
-        self.settings, self.weather, self.perf, self.metrics = settings, weather, perf, metrics
+    settings: dict
+    weather: Weather | DemoWeather
+    perf: Perf
+    metrics: Metrics
 
     def screens(self) -> list[str]:
         return ["home", *self.settings["plus"].values(), *self.settings["billboards"]]
@@ -77,7 +89,7 @@ class Panel:
             "billboards": s["billboards"],
             "perf": {"budget_ms": self.perf.budget, "late_ms": self.perf.late_after},
             "weather": weather_state(self.weather),
-            "bench": self.perf.pending(),
+            "bench": asdict(run) if (run := self.perf.pending()) else None,
         }
 
 
@@ -92,7 +104,7 @@ def handler(panel: Panel):
                     panel.metrics.set("panel_page_seen_timestamp_seconds", time.time())
                 return self.send_json(panel.state())
             if path == "/api/bench":
-                return self.send_json(panel.perf.last_bench or {})
+                return self.send_json(asdict(panel.perf.last_bench) if panel.perf.last_bench else {})
             if path == "/metrics":
                 return self.send(200, panel.metrics.render().encode(), "text/plain; version=0.0.4")
             if path == "/":
@@ -128,7 +140,7 @@ def handler(panel: Panel):
                 result = panel.perf.finish_bench(path.rsplit("/", 1)[1], body.get("frames") or [])
                 if result is None:
                     return self.send(409, b"no such bench run\n", "text/plain")
-                return self.send_json(result)
+                return self.send_json(asdict(result))
             self.send(404, b"not found\n", "text/plain")
 
         def read_json(self):

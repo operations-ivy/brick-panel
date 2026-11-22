@@ -25,6 +25,7 @@ def server(settings):
     srv = serve(panel, "127.0.0.1", 0)
     yield f"http://127.0.0.1:{srv.server_address[1]}", panel
     srv.shutdown()
+    srv.server_close()
 
 
 def get(url):

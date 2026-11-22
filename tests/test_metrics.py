@@ -18,3 +18,9 @@ def test_render_groups_by_name_with_help():
     assert text.count("# TYPE panel_transitions_total counter") == 1
     assert 'panel_transitions_total{result="smooth"} 2' in text
     assert 'panel_screen{screen="home"} 1' in text
+
+
+def test_label_values_are_escaped():
+    m = Metrics()
+    m.set("panel_info", 1, version='a"b\\c\nd')
+    assert 'panel_info{version="a\\"b\\\\c\\nd"} 1' in m.render()

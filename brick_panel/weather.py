@@ -344,7 +344,7 @@ class Weather(threading.Thread):
         self.metrics, self.opener, self.now = metrics, opener, now
         self.sources = [cls(self.point, self._get) for cls in (sources or self.SOURCES)] if self.point else []
         self._lock = threading.Lock()
-        self._stop = threading.Event()
+        self._stopping = threading.Event()
         self._current, self._periods, self._alerts = {}, [], None
         self.source = None  # the source of the data shown
         self.updated = None  # time.time() of that data
@@ -375,21 +375,21 @@ class Weather(threading.Thread):
         return None if self.updated is None else time.time() - self.updated
 
     def stop(self):
-        self._stop.set()
+        self._stopping.set()
 
     # The thread's side.
 
     def run(self):
         if not self.point:
             return
-        while not self._stop.is_set():
+        while not self._stopping.is_set():
             ok = self.poll()
             if ok:
                 self.retry = RETRY_SECONDS
                 wait = self.poll_seconds
             else:
                 wait, self.retry = self.retry, min(self.retry * 2, self.poll_seconds)
-            self._stop.wait(wait)
+            self._stopping.wait(wait)
 
     def _get(self, source, kind, url):
         req = urllib.request.Request(

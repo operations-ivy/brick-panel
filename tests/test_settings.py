@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 from brick_panel import settings as S
 
@@ -46,6 +49,19 @@ def test_cli_prints_one_value(tmp_path):
         text=True,
         check=True,
         cwd=Path(__file__).parents[1],
-        env={"BRICK_PANEL_SETTINGS": str(local), "PATH": "/usr/bin:/bin"},
+        env={**os.environ, "BRICK_PANEL_SETTINGS": str(local)},
     )
     assert out.stdout.strip() == "try-this"
+
+
+def test_cli_refuses_an_unknown_setting(capsys):
+    assert S.main(["settings", "kiosk.rotaton"]) == 1
+    assert "no such setting" in capsys.readouterr().err
+    assert S.main(["settings"]) == 2
+
+
+def test_local_file_must_be_a_mapping(tmp_path):
+    local = tmp_path / "settings.yaml"
+    local.write_text("- a list\n")
+    with pytest.raises(ValueError, match="mapping"):
+        S.load(local)

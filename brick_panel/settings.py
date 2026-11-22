@@ -36,16 +36,31 @@ def load(path: Path | None = None) -> dict:
     settings = yaml.safe_load(DEFAULTS.read_text())
     path = path or local_path()
     if path.is_file():
-        settings = merge(settings, yaml.safe_load(path.read_text()) or {})
+        local = yaml.safe_load(path.read_text()) or {}
+        if not isinstance(local, dict):
+            raise ValueError(f"{path}: expected a mapping of settings, got {type(local).__name__}")
+        settings = merge(settings, local)
     return settings
 
 
-def lookup(settings: dict, dotted: str):
+def lookup(settings: dict, dotted: str) -> object:
     value = settings
     for part in dotted.split("."):
         value = value[part]
     return value
 
 
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        print("usage: python3 -m brick_panel.settings <key.path>", file=sys.stderr)
+        return 2
+    try:
+        print(lookup(load(), argv[1]))
+    except (KeyError, TypeError):
+        print(f"settings: no such setting {argv[1]!r}", file=sys.stderr)
+        return 1
+    return 0
+
+
 if __name__ == "__main__":
-    print(lookup(load(), sys.argv[1]))
+    sys.exit(main(sys.argv))
