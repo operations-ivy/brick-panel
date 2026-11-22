@@ -16,6 +16,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from collections.abc import Iterable
+from typing import Any
 
 from .metrics import Metrics
 
@@ -63,9 +64,12 @@ class HomeAssistant(threading.Thread):
         return s["state"] if s and s.get("state") not in (None, "unknown", "unavailable") else default
 
     def number(self, entity_id: str, default: float) -> float:
+        raw = self.value(entity_id)
+        if raw is None:
+            return default
         try:
-            return float(self.value(entity_id))
-        except (TypeError, ValueError):
+            return float(raw)
+        except ValueError:
             return default
 
     def call(self, domain: str, service: str, **data: object) -> None:
@@ -95,7 +99,7 @@ class HomeAssistant(threading.Thread):
             self._call(*item)
             next_poll = 0.0  # show the result now
 
-    def _request(self, method: str, path: str, body: object = None) -> object:
+    def _request(self, method: str, path: str, body: object = None) -> Any:
         data = json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(
             self.url + path,

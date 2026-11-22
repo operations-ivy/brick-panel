@@ -84,16 +84,31 @@ def test_no_link_refuses(setup):
     assert c.set_mode("cool") == (False, "no home assistant")
 
 
+REFUSED = (False, "not a setpoint this mode allows")
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"temperature": 90},  # over the guardrail
+        {"target_temp_low": 68},  # not a heat-mode key
+        {"temperature": "72"},
+        {"temperature": True},
+        "72",
+        {},
+    ],
+)
+def test_bad_setpoints_refused(setup, data):
+    c, _, _, _ = setup
+    c.unlock("2468")
+    assert c.set_setpoints(data) == REFUSED
+
+
 def test_setpoints_checked_against_mode_and_guardrails(setup):
     c, ha, _, _ = setup
     c.unlock("2468")
-    assert c.set_setpoints({"temperature": 90})[0] is False  # over the guardrail
-    assert c.set_setpoints({"target_temp_low": 68})[0] is False  # not a heat-mode key
-    assert c.set_setpoints({"temperature": "72"})[0] is False
-    assert c.set_setpoints({"temperature": True})[0] is False
-    assert c.set_setpoints("72")[0] is False
     assert c.set_mode("heat_cool") == (True, "")
-    assert c.set_setpoints({"target_temp_low": 72})[0] is False  # 2 from cool's 74: under the gap
+    assert c.set_setpoints({"target_temp_low": 72}) == REFUSED  # 2 from cool's 74: under the gap
     assert c.set_setpoints({"target_temp_low": 66}) == (True, "")
     attrs = ha.attrs("climate.thermostat")
     assert (attrs["target_temp_low"], attrs["target_temp_high"]) == (66, 74)  # both sent in auto
@@ -103,7 +118,7 @@ def test_guardrails_follow_home_assistant(setup):
     c, ha, _, _ = setup
     ha.states["input_number.thermostat_setpoint_max"]["state"] = "72"
     c.unlock("2468")
-    assert c.set_setpoints({"temperature": 73})[0] is False
+    assert c.set_setpoints({"temperature": 73}) == REFUSED
     assert c.set_setpoints({"temperature": 72})[0] is True
 
 
@@ -119,9 +134,9 @@ def test_lights_only_the_panels(setup):
     c, ha, _, metrics = setup
     c.unlock("2468")
     assert c.set_light("light.kitchen", True) == (False, "not one of the panel's lights")
-    assert c.set_light("light.lamp", "yes")[0] is False
-    assert c.set_light("light.lamp", True, 0)[0] is False
-    assert c.set_light("light.lamp", True, 101)[0] is False
+    assert c.set_light("light.lamp", "yes") == (False, "on must be true or false")
+    assert c.set_light("light.lamp", True, 0) == (False, "brightness is 1-100")
+    assert c.set_light("light.lamp", True, 101) == (False, "brightness is 1-100")
     assert c.set_light("light.lamp", True, 40) == (True, "")
     assert brightness_pct(ha.attrs("light.lamp")) == 40
     assert c.set_light("light.lamp", False) == (True, "")
@@ -135,7 +150,7 @@ def test_view(setup):
     assert v["climate"]["targets"] == ["temperature"]
     assert v["climate"]["house"]["average"] == pytest.approx((71.4 + 68.5) / 2)
     assert v["lights"][0]["name"] == "DESK"
-    assert "pin" not in str(v).lower().replace("has_pin", "")
+    assert "2468" not in str(v)  # the code never leaves the server
 
 
 def test_house_without_a_sensor(setup):

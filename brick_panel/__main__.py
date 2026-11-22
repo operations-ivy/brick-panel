@@ -12,6 +12,7 @@ from . import feeds as feeds_mod
 from . import settings as settings_mod
 from .controls import Controls
 from .demo import demo_feeds
+from .demo import demo_settings
 from .demo import DemoHomeAssistant
 from .demo import DemoRoom
 from .demo import DemoWeather
@@ -38,6 +39,7 @@ def main(argv: list[str] | None = None) -> None:
     metrics = Metrics()
     metrics.set("panel_info", 1, version=__version__)
     if args.demo:
+        settings = demo_settings(settings)
         weather, feeds = DemoWeather(), demo_feeds()
         ha, room = DemoHomeAssistant(settings), DemoRoom()
     else:
@@ -48,7 +50,10 @@ def main(argv: list[str] | None = None) -> None:
         room = None
         if r["sensor"]:
             room = Room(r["i2c_bus"], r["i2c_address"], r["offset"], r["poll_seconds"], metrics)
-    for source in (weather, *feeds.values(), ha, *([room] if room else [])):
+    sources = [weather, *feeds.values(), ha]
+    if room is not None:
+        sources.append(room)
+    for source in sources:
         source.start()
     controls = Controls.from_settings(settings, ha, metrics, room)
     panel = Panel(settings, weather, Perf(settings["perf"], metrics), metrics, feeds, controls)

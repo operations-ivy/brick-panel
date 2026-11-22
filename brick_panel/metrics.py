@@ -41,6 +41,8 @@ HELP = {
 KNOWN = {
     "panel_transitions_total": ("result", ("smooth", "janky")),
     "panel_transition_frames_total": ("result", ("on_time", "late")),
+    "panel_unlock_attempts_total": ("result", ("granted", "denied", "locked_out", "hard_locked", "no_code")),
+    "panel_relocks_total": ("reason", ("idle", "button")),
 }
 
 

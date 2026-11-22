@@ -35,6 +35,11 @@ def light_name(entity: str, attrs: dict, names: dict[str, str]) -> str:
     return (names.get(entity) or fallback).upper()
 
 
+def available_modes(attrs: dict) -> list[str]:
+    """The modes the thermostat has, in the screen's order."""
+    return [m for m in MODES if m in (attrs.get("hvac_modes") or MODES)]
+
+
 def check_setpoints(attrs: dict, data: object, lo: float, hi: float, gap: float) -> dict | None:
     """data, if it's a setpoint change the thermostat's current mode allows
     (only its keys, numbers inside lo-hi, auto's pair at least gap apart);
@@ -151,7 +156,7 @@ class Controls:
             "available": bool(attrs),
             "mode": mode,
             "mode_label": MODE_LABELS.get(mode, (mode or "--").upper()),
-            "modes": [m for m in MODES if m in (attrs.get("hvac_modes") or MODES)],
+            "modes": available_modes(attrs),
             "action": action,
             "action_label": ACTION_LABELS.get(action, (action or "--").upper()),
             "targets": targets(attrs),
@@ -163,16 +168,16 @@ class Controls:
         }
 
     def lights_view(self) -> list[dict]:
-        names = self.settings["lights"]["entities"]
+        light_names = self.settings["lights"]["entities"]  # entity -> the name to show
         out = []
-        for entity in names:
+        for entity in light_names:
             state = self.ha.state(entity)
             attrs = (state or {}).get("attributes") or {}
             value = (state or {}).get("state")
             out.append(
                 {
                     "entity": entity,
-                    "name": light_name(entity, attrs, names),
+                    "name": light_name(entity, attrs, light_names),
                     "known": state is not None,
                     "available": value in ("on", "off"),
                     "on": value == "on",
@@ -239,8 +244,7 @@ class Controls:
         if why := self._allowed():
             return False, why
         c = self.settings["climate"]
-        allowed = self.climate_view()["modes"]
-        if mode not in allowed:
+        if mode not in available_modes(self.ha.attrs(c["thermostat"])):
             return False, "not a mode this thermostat has"
         return self._send("climate", "set_hvac_mode", "set_hvac_mode", entity_id=c["thermostat"], hvac_mode=mode)
 

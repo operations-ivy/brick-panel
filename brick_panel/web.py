@@ -88,8 +88,10 @@ def control(controls: Controls, path: str, body: dict) -> dict:
             ok, why = controls.set_mode(body["mode"])
         else:
             ok, why = controls.set_setpoints(body.get("setpoints"))
-    else:
+    elif path == "/api/light":
         ok, why = controls.set_light(body.get("entity"), body.get("on"), body.get("pct"))
+    else:
+        raise ValueError(f"no control at {path}")
     return {"ok": ok, "why": why, **controls.lock_view()}
 
 

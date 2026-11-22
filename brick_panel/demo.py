@@ -130,6 +130,17 @@ def demo_feeds() -> dict[str, DemoFeed]:
     return {"board": DemoFeed(board), "prometheus": DemoFeed(prometheus), "overwatch": DemoFeed(overwatch)}
 
 
+def demo_settings(settings: dict) -> dict:
+    """The settings --demo needs: a code (1982) and two lights, unless the
+    settings have their own."""
+    settings["climate"]["pin"] = settings["climate"]["pin"] or "1982"
+    settings["lights"]["entities"] = settings["lights"]["entities"] or {
+        "light.lamp": "Desk",
+        "light.bedside": "Bedside",
+    }
+    return settings
+
+
 class DemoRoom:
     """The bedroom, made up."""
 
@@ -147,17 +158,12 @@ class DemoRoom:
 
 class DemoHomeAssistant:
     """Home Assistant, made up, that does what it's told: a heating
-    thermostat, its guardrails, and the panel's lights (two made up when the
-    settings list none). The code on --demo is 1982."""
+    thermostat, its guardrails, and the settings' lights."""
 
     connected, error, unit = True, "", "°F"
 
     def __init__(self, settings: dict) -> None:
         c = settings["climate"]
-        if not c["pin"]:
-            c["pin"] = "1982"
-        if not settings["lights"]["entities"]:
-            settings["lights"]["entities"] = {"light.lamp": "Desk", "light.bedside": "Bedside"}
         self.thermostat = c["thermostat"]
         self.states = {
             self.thermostat: {

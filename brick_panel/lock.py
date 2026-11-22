@@ -1,12 +1,14 @@
-from __future__ import annotations
-
 """The panel's lock. Looking is free; changing anything needs the code, which
 relocks after a quiet spell. Wrong codes lock it out for a while, longer each
 time. Home Assistant can override it (input_select.lcars_panel_lock):
 `unlocked` needs no code, `hard_locked` refuses even the right one."""
+
+from __future__ import annotations
+
 import hmac
 import random
 import time
+from collections.abc import Callable
 
 NORMAL, UNLOCKED, HARD_LOCKED = "normal", "unlocked", "hard_locked"
 REMOTE_MODES = (NORMAL, UNLOCKED, HARD_LOCKED)
@@ -18,13 +20,13 @@ GRANTED, DENIED, LOCKED_OUT, HARD, NO_CODE = "granted", "denied", "locked_out", 
 class PanelLock:
     def __init__(
         self,
-        pin,
-        idle_seconds=120,
-        misses_before_lockout=3,
-        lockout_seconds=30,
-        max_lockout_seconds=600,
-        clock=time.monotonic,
-    ):
+        pin: str,
+        idle_seconds: float = 120,
+        misses_before_lockout: int = 3,
+        lockout_seconds: float = 30,
+        max_lockout_seconds: float = 600,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self.pin = str(pin)
         self.idle_seconds = idle_seconds
         self.misses_before_lockout = misses_before_lockout
@@ -38,18 +40,18 @@ class PanelLock:
         self._unlocked = False
         self._last_touch = clock()
 
-    def set_remote(self, mode):
+    def set_remote(self, mode: str | None) -> None:
         """Home Assistant's mode; anything unknown (or no answer) is normal."""
         mode = mode if mode in REMOTE_MODES else NORMAL
         if mode == HARD_LOCKED:
             self._unlocked = False
         self.remote = mode
 
-    def touch(self):
+    def touch(self) -> None:
         self._last_touch = self.clock()
 
     @property
-    def can_change(self):
+    def can_change(self) -> bool:
         if self.remote == HARD_LOCKED:
             return False
         if self.remote == UNLOCKED:
@@ -57,18 +59,18 @@ class PanelLock:
         return self._unlocked and not self.idle
 
     @property
-    def unlocked(self):
+    def unlocked(self) -> bool:
         """Opened with the code (Home Assistant's override aside)."""
         return self._unlocked
 
     @property
-    def idle(self):
+    def idle(self) -> bool:
         return self.clock() - self._last_touch >= self.idle_seconds
 
-    def lockout_remaining(self):
+    def lockout_remaining(self) -> float:
         return max(0.0, self._locked_out_until - self.clock())
 
-    def try_code(self, code):
+    def try_code(self, code: str) -> str:
         if self.remote == HARD_LOCKED:
             return HARD
         if self.lockout_remaining() > 0:
@@ -89,10 +91,10 @@ class PanelLock:
             return LOCKED_OUT
         return DENIED
 
-    def lock(self):
+    def lock(self) -> None:
         self._unlocked = False
 
-    def relock_if_idle(self):
+    def relock_if_idle(self) -> bool:
         """Lock after the quiet spell; True when that just happened."""
         if self._unlocked and self.idle:
             self._unlocked = False
@@ -100,7 +102,10 @@ class PanelLock:
         return False
 
 
-def shuffled_digits(rng=random.SystemRandom()):
+_RNG = random.SystemRandom()
+
+
+def shuffled_digits(rng: random.Random = _RNG) -> list[str]:
     """The keypad's labels for one visit: where a digit sits changes every
     time, so watching a hand teaches nothing."""
     digits = list("0123456789")

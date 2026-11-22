@@ -11,6 +11,7 @@ import pytest
 
 from brick_panel.controls import Controls
 from brick_panel.demo import demo_feeds
+from brick_panel.demo import demo_settings
 from brick_panel.demo import DemoHomeAssistant
 from brick_panel.demo import DemoRoom
 from brick_panel.demo import DemoWeather
@@ -23,15 +24,16 @@ from brick_panel.web import STATIC
 from brick_panel.web import static_file
 
 
-def make_panel(settings, feeds=None, controls=False):
-    metrics = Metrics()
-    c = Controls.from_settings(settings, DemoHomeAssistant(settings), metrics, DemoRoom()) if controls else None
-    return Panel(settings, DemoWeather(), Perf(settings["perf"], metrics), metrics, feeds or {}, c)
+def make_panel(settings, feeds=None, controls=None, metrics=None):
+    metrics = metrics or Metrics()
+    return Panel(settings, DemoWeather(), Perf(settings["perf"], metrics), metrics, feeds or {}, controls)
 
 
 @pytest.fixture
 def server(settings):
-    panel = make_panel(settings, demo_feeds(), controls=True)
+    settings, metrics = demo_settings(settings), Metrics()
+    controls = Controls.from_settings(settings, DemoHomeAssistant(settings), metrics, DemoRoom())
+    panel = make_panel(settings, demo_feeds(), controls, metrics)
     srv = serve(panel, "127.0.0.1", 0)
     yield f"http://127.0.0.1:{srv.server_address[1]}", panel
     srv.shutdown()

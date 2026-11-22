@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import random
+
 from brick_panel import lock as L
 
 
@@ -104,7 +106,6 @@ def test_no_pin_means_no_code_can_open_it():
 
 
 def test_shuffled_digits_are_all_ten():
-    import random
 
     digits = L.shuffled_digits(random.Random(1))
     assert sorted(digits) == list("0123456789")
