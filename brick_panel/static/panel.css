@@ -1,0 +1,224 @@
+/* brick1982's panel: 480x800, portrait.
+
+   Smoothness rules (the user, 2026-11-22: smooth screen changes above all):
+   - Only transform and opacity ever animate; the compositor moves them
+     without layout or paint. No animated shadows, filters, sizes or colours.
+   - Every screen is its own layer (will-change: transform), painted once and
+     slid, never repainted mid-move.
+   - The Home scene's skyline is painted once into a canvas; rain, stars,
+     windows and the car are compositor animations of static layers. */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--void); overflow: hidden; }
+body {
+  display: grid; place-items: center;
+  color: var(--text); font-family: var(--term); font-size: 24px;
+  -webkit-user-select: none; user-select: none; cursor: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#stage {
+  position: relative; width: 480px; height: 800px; overflow: hidden;
+  background: var(--void); touch-action: none; contain: strict;
+}
+
+/* ---- Screens ---- */
+
+.screen {
+  position: absolute; inset: 0; width: 480px; height: 800px; overflow: hidden;
+  background: var(--void); z-index: 0;
+  will-change: transform, opacity; contain: strict; transform: translate3d(0, 0, 0);
+}
+/* Every screen stays painted, stacked under the live one (the compositor
+   skips what's covered), so a screen change never waits on a first paint. */
+.screen.live { z-index: 2; }
+.screen.incoming { z-index: 3; }
+/* Covered screens' ambient animations stop (no compositor work). */
+.screen:not(.live):not(.incoming) * { animation-play-state: paused !important; }
+
+/* ---- Overlays ---- */
+
+#crt {
+  position: absolute; inset: 0; pointer-events: none; z-index: 50; will-change: transform;
+  background:
+    repeating-linear-gradient(to bottom, #0000 0 2px, #00000038 2px 3px),
+    radial-gradient(ellipse at 50% 45%, #0000 55%, #000a 100%);
+}
+#static {
+  position: absolute; inset: 0; pointer-events: none; z-index: 40; opacity: 0;
+  will-change: opacity; background-size: 240px 240px; image-rendering: pixelated;
+}
+
+/* The arrows at the edges: where a tap goes. */
+#hints { position: absolute; inset: 0; pointer-events: none; z-index: 30; will-change: opacity; }
+.hint {
+  position: absolute; display: flex; align-items: center; gap: 6px;
+  font-family: var(--pixel); font-size: 11px; letter-spacing: 2px; color: var(--green);
+  text-shadow: var(--glow-green);
+}
+.hint b { width: 0; height: 0; border: 6px solid transparent; animation: breathe 2.4s ease-in-out infinite; }
+.tri.up { border-bottom: 9px solid currentColor; border-top-width: 0; }
+.tri.down { border-top: 9px solid currentColor; border-bottom-width: 0; }
+.tri.left { border-right: 9px solid currentColor; border-left-width: 0; }
+.tri.right { border-left: 9px solid currentColor; border-right-width: 0; }
+.hint.up { top: 6px; left: 50%; transform: translateX(-50%); }
+.hint.down { bottom: 8px; left: 50%; transform: translateX(-50%); }
+.hint.left, .hint.right { top: 50%; flex-direction: column; transform: translateY(-50%); }
+.hint.left span, .hint.right span { writing-mode: vertical-rl; }
+.hint.left { left: 8px; }
+.hint.left span { transform: rotate(180deg); }
+.hint.right { right: 8px; }
+.hint.home b, .hint.home { color: var(--cyan); text-shadow: var(--glow-cyan); }
+@keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+
+/* ---- Home ---- */
+
+.topbar {
+  position: absolute; top: 0; left: 0; right: 0; height: 52px; padding: 14px 18px 0;
+  display: flex; justify-content: space-between; align-items: flex-start; z-index: 5;
+}
+.logo {
+  position: relative; font-family: var(--pixel); font-weight: 700; font-size: 15px; letter-spacing: 3px;
+  color: var(--cyan); text-shadow: var(--glow-cyan);
+}
+.link { display: flex; gap: 8px; align-items: center; font-family: var(--pixel); font-size: 10px;
+  letter-spacing: 2px; color: var(--dim); }
+.led { width: 9px; height: 9px; background: var(--green); box-shadow: 0 0 8px var(--green); }
+.link.down .led { background: var(--red); box-shadow: 0 0 8px var(--red); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .15; } }
+
+/* The neon-tube clock and its glitch: two coloured copies (::before,
+   ::after) that only move and fade. */
+.clock { position: absolute; top: 62px; left: 0; right: 0; display: flex; justify-content: center;
+  align-items: flex-start; z-index: 5; }
+.time {
+  position: relative; font-size: 172px; line-height: .9; letter-spacing: 2px;
+  color: #e9fdff; text-shadow: 0 0 3px #fff, 0 0 10px var(--cyan), 0 0 28px var(--cyan), 0 0 60px var(--cyan-deep);
+}
+.time::before, .time::after {
+  content: attr(data-text); position: absolute; inset: 0; opacity: 0; text-shadow: none;
+  will-change: transform, opacity;
+}
+.time::before { color: var(--magenta); }
+.time::after { color: var(--cyan); }
+.time.glitch::before { animation: glitch-a .32s steps(4) 1; }
+.time.glitch::after { animation: glitch-b .32s steps(4) 1; }
+@keyframes glitch-a { 0% { opacity: .9; transform: translate(-6px, 2px); } 50% { opacity: .7; transform: translate(4px, -3px); }
+  100% { opacity: 0; transform: translate(0, 0); } }
+@keyframes glitch-b { 0% { opacity: .9; transform: translate(6px, -2px); } 50% { opacity: .7; transform: translate(-5px, 3px); }
+  100% { opacity: 0; transform: translate(0, 0); } }
+.ampm { margin: 26px 0 0 8px; font-family: var(--pixel); font-size: 16px; color: var(--cyan); text-shadow: var(--glow-cyan); }
+
+.date {
+  position: absolute; top: 230px; left: 0; right: 0; text-align: center; z-index: 5;
+  font-family: var(--pixel); font-size: 20px; letter-spacing: 6px; color: var(--amber); text-shadow: var(--glow-amber);
+}
+.forecast { position: absolute; top: 272px; left: 34px; right: 34px; z-index: 5; text-align: center; }
+.forecast .now { display: flex; justify-content: center; align-items: baseline; gap: 14px; }
+.forecast .temp { font-size: 54px; color: var(--text); text-shadow: 0 0 10px #dff6ff55; }
+.forecast .cond { font-family: var(--pixel); font-size: 13px; letter-spacing: 2px; color: var(--cyan); }
+.forecast .next { margin-top: 2px; font-size: 22px; color: var(--dim); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.forecast .next b { color: var(--sodium); font-weight: normal; }
+
+/* The city: painted once (scene.js), with compositor-only life on top. */
+.city { position: absolute; left: 0; bottom: 0; width: 480px; height: 430px; }
+.sky { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+.stars { height: 420px; background-repeat: repeat; }
+.night.clear .stars { opacity: 1; animation: twinkle 7s ease-in-out infinite alternate; }
+@keyframes twinkle { to { opacity: .55; } }
+
+.windows { position: absolute; inset: 0; pointer-events: none; }
+.windows i { position: absolute; width: 5px; height: 6px; background: var(--amber); opacity: .9;
+  animation: flicker var(--d, 9s) steps(1) var(--delay, 0s) infinite; }
+@keyframes flicker { 0%, 61% { opacity: .9; } 62%, 70% { opacity: .1; } 71%, 100% { opacity: .9; } }
+
+.car { position: absolute; top: 404px; left: 0; width: 34px; height: 8px; pointer-events: none;
+  transform: translateX(-60px); animation: fly 38s linear 6s infinite; }
+.car i { position: absolute; inset: 0; background: linear-gradient(90deg, #ff2a6d00, #ff2a6d 60%, #fff 100%);
+  border-radius: 2px; }
+@keyframes fly { 0% { transform: translateX(-60px); } 16% { transform: translateX(540px); } 100% { transform: translateX(540px); } }
+
+.brick-sign {
+  position: absolute; top: 452px; right: 30px; display: flex; flex-direction: column; align-items: center;
+  padding: 6px 5px; border: 2px solid var(--rose); background: #12030b; z-index: 3;
+  box-shadow: 0 0 10px var(--rose), inset 0 0 8px #ff2a6d66;
+  font-family: var(--pixel); font-weight: 700; font-size: 19px; line-height: 1.05; color: #ffd9e4;
+  text-shadow: 0 0 4px var(--rose), 0 0 12px var(--rose);
+}
+.brick-sign span:nth-child(3) { animation: flicker 11s steps(1) 2s infinite; }
+
+.billboards { position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 4; pointer-events: none; }
+.billboard {
+  position: absolute; width: 124px; height: 76px; padding: 7px 8px; pointer-events: auto;
+  background: #07061299; border: 2px solid var(--c); box-shadow: 0 0 10px var(--c), inset 0 0 10px #0008;
+  display: flex; flex-direction: column; justify-content: space-between; text-align: left;
+  font: inherit; color: inherit; cursor: none;
+}
+.billboard::after { /* the legs it stands on */
+  content: ""; position: absolute; left: 18px; right: 18px; bottom: -14px; height: 12px;
+  border-left: 3px solid #1b1838; border-right: 3px solid #1b1838;
+}
+.billboard .name { font-family: var(--pixel); font-size: 11px; letter-spacing: 2px; color: var(--c);
+  text-shadow: 0 0 6px var(--c); }
+.billboard .val { font-size: 25px; line-height: 1; color: var(--text); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.billboard.lit .val { color: var(--c); animation: blink 1.2s steps(2) infinite; }
+.billboard.pressed { transform: scale(.96); }
+
+/* Rain: tall tiles sliding down forever, on the compositor. */
+.rain { position: absolute; left: 0; top: -400px; width: 560px; height: 1200px; pointer-events: none;
+  opacity: 0; background-repeat: repeat; z-index: 6; }
+.rain.near { animation: fall .55s linear infinite; }
+.rain.far { animation: fall 1.1s linear infinite; }
+.raining .rain { opacity: 1; }
+.raining .rain.far { opacity: .55; }
+@keyframes fall { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-40px, 400px, 0); } }
+
+/* ---- App screens ---- */
+
+.app { padding: 0 22px; }
+.app-head {
+  height: 112px; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 14px;
+  border-bottom: 2px solid var(--edge);
+}
+.app-head .kicker { font-family: var(--pixel); font-size: 10px; letter-spacing: 3px; color: var(--dim); }
+.app-head h1 {
+  font-family: var(--pixel); font-weight: 700; font-size: 34px; letter-spacing: 4px; color: var(--c, var(--magenta));
+  text-shadow: 0 0 4px #fff6, 0 0 12px var(--c, var(--magenta)); font-weight: 700;
+}
+.app-body { padding-top: 18px; }
+
+.panel-box {
+  position: relative; background: var(--panel); border: 2px solid var(--edge); padding: 14px 16px 16px; margin-bottom: 16px;
+}
+.panel-box > .tab {
+  position: absolute; top: -2px; left: -2px; padding: 3px 10px 2px; background: var(--c, var(--cyan));
+  font-family: var(--pixel); font-size: 10px; letter-spacing: 2px; color: var(--void);
+}
+.panel-box::before, .panel-box::after { /* status-coloured corner brackets */
+  content: ""; position: absolute; width: 12px; height: 12px; border: 2px solid var(--c, var(--cyan));
+}
+.panel-box::before { right: -2px; top: -2px; border-left: 0; border-bottom: 0; }
+.panel-box::after { left: -2px; bottom: -2px; border-right: 0; border-top: 0; }
+.panel-box .body { margin-top: 18px; }
+
+.soon { font-size: 26px; color: var(--dim); }
+.soon b { color: var(--c, var(--cyan)); font-weight: normal; }
+
+/* Weather */
+.wx-now { display: flex; align-items: flex-end; gap: 18px; }
+.wx-now .big { font-size: 120px; line-height: .8; color: var(--text); text-shadow: 0 0 14px #dff6ff55; }
+.wx-now .what { padding-bottom: 6px; }
+.wx-now .what .cond { font-family: var(--pixel); font-size: 14px; letter-spacing: 2px; color: var(--cyan);
+  text-shadow: var(--glow-cyan); }
+.wx-now .what .meta { font-size: 24px; color: var(--dim); }
+.wx-periods { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.wx-period { background: var(--panel); border: 2px solid var(--edge); padding: 10px 12px; }
+.wx-period .name { font-family: var(--pixel); font-size: 10px; letter-spacing: 2px; color: var(--dim); }
+.wx-period .t { font-size: 46px; line-height: 1; }
+.wx-period.day .t { color: var(--sodium); text-shadow: var(--glow-amber); }
+.wx-period.night .t { color: var(--violet); text-shadow: 0 0 10px #9d4edd88; }
+.wx-period .f { font-size: 20px; color: var(--text); line-height: 1.05; min-height: 42px; }
+.wx-period .r { font-size: 20px; color: var(--cyan); }
+.wx-foot { margin-top: 14px; font-size: 20px; color: var(--faint); }

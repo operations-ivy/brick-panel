@@ -1,0 +1,39 @@
+/* The brick homelab's neon look, in one file: the Presto's palette and
+   brick-status/brick-games' web palette, merged. Copy this file to give
+   another page the same look. */
+
+@font-face { font-family: "VT323"; src: url("fonts/vt323-400.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "Silkscreen"; src: url("fonts/silkscreen-400.woff2") format("woff2"); font-weight: 400; font-display: block; }
+@font-face { font-family: "Silkscreen"; src: url("fonts/silkscreen-700.woff2") format("woff2"); font-weight: 700; font-display: block; }
+
+:root {
+  /* Ground */
+  --void: #05040c;      /* the background */
+  --panel: #0b0a19;     /* a panel's fill */
+  --edge: #1d1a40;      /* borders */
+  --grid: #100f26;      /* background grid lines */
+  --text: #dff6ff;
+  --dim: #7d86b3;
+  --faint: #3c4068;
+
+  /* Neon */
+  --cyan: #00eaff;      /* the default accent, the clock */
+  --cyan-deep: #02465a; /* the clock's halo */
+  --magenta: #ff2bd6;   /* headings, the glitch's other half */
+  --rose: #ff2a6d;      /* the Presto's magenta: signs, the BRICK sign */
+  --amber: #ffb300;     /* the date, warnings */
+  --sodium: #ff9f1c;    /* streetlight orange, heat */
+  --green: #39ff6a;     /* ok, Matrix phosphor */
+  --green-deep: #0a4a22;
+  --red: #ff3355;       /* failing, alerts */
+  --violet: #9d4edd;
+
+  --pixel: "Silkscreen", monospace;
+  --term: "VT323", monospace;
+
+  --glow-cyan: 0 0 2px #fff8, 0 0 8px var(--cyan), 0 0 22px #00eaff88;
+  --glow-magenta: 0 0 2px #fff8, 0 0 8px var(--magenta), 0 0 22px #ff2bd688;
+  --glow-amber: 0 0 6px #ffb30099, 0 0 16px #ffb30055;
+  --glow-green: 0 0 6px #39ff6aaa, 0 0 14px #39ff6a55;
+  --glow-red: 0 0 2px #fff8, 0 0 8px var(--red), 0 0 22px #ff335588;
+}

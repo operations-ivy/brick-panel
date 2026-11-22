@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Time the panel's screen changes on the real screen, and fail if they aren't
+smooth: asks the running page for a bench run (round the plus and through
+every billboard, perf.bench_rounds times), waits for its frames, and checks
+the p95 frame and the share of late frames against the settings' limits.
+
+    deploy/bench            # on brick1982, with the neon panel showing
+    deploy/bench --port 8768
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+import urllib.request
+
+
+def call(url: str, body: dict | None = None) -> dict:
+    data = None if body is None else json.dumps(body).encode()
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=5) as r:
+        return json.loads(r.read())
+
+
+def main() -> int:
+    p = argparse.ArgumentParser()
+    p.add_argument("--port", type=int, default=8767)
+    p.add_argument("--timeout", type=float, default=180)
+    args = p.parse_args()
+    base = f"http://127.0.0.1:{args.port}"
+    run = call(base + "/api/bench", {})["id"]
+    deadline = time.monotonic() + args.timeout
+    while time.monotonic() < deadline:
+        time.sleep(2)
+        result = call(base + "/api/bench")
+        if result.get("id") == run:
+            print(json.dumps(result, indent=1))
+            verdict = "smooth" if result["passed"] else "NOT smooth"
+            print(
+                f"bench: {verdict}: p95 {result['p95_ms']} ms, {result['late_ratio']:.1%} late, "
+                f"worst {result['worst_ms']} ms over {result['frames']} frames"
+            )
+            return 0 if result["passed"] else 1
+    print("bench: no answer from the page (is the neon panel showing?)", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

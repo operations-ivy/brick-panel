@@ -1,0 +1,34 @@
+#!/bin/sh
+# The kiosk: cage runs this (brick-panel-kiosk.service). It turns the panel to
+# portrait, waits for the panel's server, then runs Chromium full screen.
+set -eu
+repo=$(cd "$(dirname "$0")/.." && pwd)
+setting() {
+    PYTHONPATH="$repo" python3 -m brick_panel.settings "$1"
+}
+output=$(setting kiosk.output)
+rotation=$(setting kiosk.rotation)
+port=$(setting server.port)
+url="http://127.0.0.1:$port/"
+
+# Wayland's transform: 90 for a panel turned 90 degrees clockwise. Touch
+# follows the output, so taps land where they're drawn.
+wlr-randr --output "$output" --transform "$rotation" || echo "kiosk: couldn't turn $output to $rotation" >&2
+
+# The server starts beside this; give it 30 s.
+i=0
+until python3 -c "import urllib.request as u; u.urlopen('${url}api/state', timeout=2)" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -lt 30 ] || break
+    sleep 1
+done
+
+# GPU raster and compositing on the Pi 4's V3D (the smooth screen changes
+# depend on it); no pinch zoom, no swipe-back, no first-run or crash bubbles.
+exec chromium --kiosk --ozone-platform=wayland \
+    --user-data-dir="$HOME/.cache/brick-panel/chromium" \
+    --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble \
+    --password-store=basic --disable-pinch --overscroll-history-navigation=0 \
+    --enable-gpu-rasterization --ignore-gpu-blocklist --enable-zero-copy \
+    --disable-features=TranslateUI,Translate --check-for-update-interval=31536000 \
+    "$url"
