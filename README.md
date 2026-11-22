@@ -35,9 +35,24 @@ settings (`plus`, `billboards`).
 | Elsewhere, tap the edge with the HOME arrow | back to Home |
 | Two-finger tap | Home, from anywhere |
 
-Built so far: Home, WEATHER and the navigation. CLIMATE, LIGHTS, BRICK,
-ALERTS, CALENDAR and SHOPPING come next (their screens say so for now). There
-is no slideshow, and won't be: no photos on brick1982 (the user, 2026-11-22).
+Built so far: Home, the navigation, and:
+
+- **WEATHER**: now (conditions, humidity, wind), the weather service's
+  warnings, the next three days' temperatures as one line, and six forecast
+  periods with rain chances.
+- **BRICK**: brick9000's board on the wall: each node's CPU, memory,
+  temperature and disk, the board's groups (cluster, builds, Argo CD,
+  services, wigle) with their first problem, the latest builds and what
+  shipped.
+- **ALERTS**: the alert condition (GREEN, YELLOW, RED), the worst of
+  Prometheus' firing alerts, overwatch's feeds and recent alerts, and the
+  weather service's warnings (Extreme is RED, Severe is YELLOW). It follows
+  LCARS' rules, so both panels agree. The billboard on Home shows how many
+  things need a look.
+
+CLIMATE, LIGHTS, CALENDAR and SHOPPING come next (their screens say so for
+now). There is no slideshow, and won't be: no photos on brick1982 (the user,
+2026-11-22).
 
 ## Smooth screen changes
 
@@ -58,7 +73,8 @@ Smooth screen changes are the first requirement, so the page is built around the
   page round the plus and through every billboard three times, then fails if
   the p95 frame is over 20 ms or over 5% of frames are late. First run on
   brick1982 (Pi 4, Chromium 154): 731 frames, p95 16.7 ms, worst 16.8 ms,
-  0 late.
+  0 late. With WEATHER, BRICK and ALERTS built (PR 2), three runs: 742, 737
+and 734 frames, the same p95 and worst, 0 late.
 
 ## Settings
 
@@ -75,6 +91,13 @@ kiosk:
 ```
 
 `python3 -m brick_panel.settings kiosk.rotation` prints one value.
+
+`feeds.sources` are the homelab pages the panel reads: the board
+(`status.brick.nozdormu.cloud/api/state`), Prometheus' alerts and
+overwatch, each polled on its own thread. An empty `url` turns one off. A
+feed's last answer is shown for `feeds.stale_seconds` after its source stops
+answering, then that part of the screen reads OFFLINE. Each feed's health is
+`panel_feed_up{feed}` in Prometheus.
 
 ## On a laptop
 

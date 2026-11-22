@@ -16,6 +16,8 @@ HELP = {
     ),
     "panel_weather_last_update_timestamp_seconds": ("gauge", "When the weather shown was fetched."),
     "panel_weather_temperature_fahrenheit": ("gauge", "Outside temperature, from the weather source."),
+    "panel_feed_up": ("gauge", "1 while a homelab feed (board, prometheus, overwatch) answers, by feed."),
+    "panel_feed_requests_total": ("counter", "Requests to the homelab's feeds, by feed and result."),
     "panel_page_seen_timestamp_seconds": ("gauge", "When the kiosk's page last asked for its state."),
     "panel_screen": ("gauge", "1 for the screen being shown, by screen."),
     "panel_transitions_total": ("counter", "Screen changes, by result: smooth (no frame late) or janky."),
