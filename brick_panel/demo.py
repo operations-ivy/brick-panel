@@ -128,3 +128,99 @@ def demo_feeds() -> dict[str, DemoFeed]:
         ]
     }
     return {"board": DemoFeed(board), "prometheus": DemoFeed(prometheus), "overwatch": DemoFeed(overwatch)}
+
+
+def demo_settings(settings: dict) -> dict:
+    """The settings --demo needs: a code (1982) and two lights, unless the
+    settings have their own."""
+    settings["climate"]["pin"] = settings["climate"]["pin"] or "1982"
+    settings["lights"]["entities"] = settings["lights"]["entities"] or {
+        "light.lamp": "Desk",
+        "light.bedside": "Bedside",
+    }
+    return settings
+
+
+class DemoRoom:
+    """The bedroom, made up."""
+
+    temperature, humidity = 71.4, 41.0
+
+    def fresh(self) -> bool:
+        return True
+
+    def document(self) -> dict:
+        return {"up": True, "temperature_f": self.temperature, "humidity": self.humidity}
+
+    def start(self) -> None:
+        pass
+
+
+class DemoHomeAssistant:
+    """Home Assistant, made up, that does what it's told: a heating
+    thermostat, its guardrails, and the settings' lights."""
+
+    connected, error, unit = True, "", "°F"
+
+    def __init__(self, settings: dict) -> None:
+        c = settings["climate"]
+        self.thermostat = c["thermostat"]
+        self.states = {
+            self.thermostat: {
+                "state": "heat",
+                "attributes": {
+                    "temperature": 70,
+                    "target_temp_low": None,
+                    "target_temp_high": None,
+                    "current_temperature": 68.5,
+                    "hvac_action": "heating",
+                    "hvac_modes": ["heat", "cool", "heat_cool", "off"],
+                },
+            },
+            c["lock_entity"]: {"state": "normal", "attributes": {}},
+            c["setpoint_min_entity"]: {"state": "64", "attributes": {}},
+            c["setpoint_max_entity"]: {"state": "76", "attributes": {}},
+        }
+        for i, entity in enumerate(settings["lights"]["entities"]):
+            on = i == 0
+            self.states[entity] = {"state": "on" if on else "off", "attributes": {"brightness": 178 if on else None}}
+
+    def state(self, entity_id: str) -> dict | None:
+        return self.states.get(entity_id)
+
+    def attrs(self, entity_id: str) -> dict:
+        return dict((self.states.get(entity_id) or {}).get("attributes") or {})
+
+    def value(self, entity_id: str, default: str | None = None) -> str | None:
+        return (self.states.get(entity_id) or {}).get("state", default)
+
+    def number(self, entity_id: str, default: float) -> float:
+        try:
+            return float(self.value(entity_id))
+        except (TypeError, ValueError):
+            return default
+
+    def call(self, domain: str, service: str, **data: object) -> None:
+        entity = data.pop("entity_id")
+        s = self.states[entity]
+        attrs = s["attributes"]
+        if service == "set_temperature":
+            attrs.update(data)
+        elif service == "set_hvac_mode":
+            mode = data["hvac_mode"]
+            s["state"] = mode
+            auto = mode == "heat_cool"
+            attrs.update(
+                temperature=None if auto or mode == "off" else 70,
+                target_temp_low=67 if auto else None,
+                target_temp_high=74 if auto else None,
+                hvac_action={"heat": "heating", "cool": "idle", "heat_cool": "idle"}.get(mode, "off"),
+            )
+        elif service == "turn_off":
+            s["state"], attrs["brightness"] = "off", None
+        elif service == "turn_on":
+            s["state"] = "on"
+            attrs["brightness"] = round(data.get("brightness_pct", 70) * 255 / 100)
+
+    def start(self) -> None:
+        pass

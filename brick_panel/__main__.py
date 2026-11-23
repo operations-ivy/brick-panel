@@ -10,10 +10,16 @@ import threading
 from . import __version__
 from . import feeds as feeds_mod
 from . import settings as settings_mod
+from .controls import Controls
 from .demo import demo_feeds
+from .demo import demo_settings
+from .demo import DemoHomeAssistant
+from .demo import DemoRoom
 from .demo import DemoWeather
+from .homeassistant import HomeAssistant
 from .metrics import Metrics
 from .perf import Perf
+from .room import Room
 from .weather import Weather
 from .web import Panel
 from .web import serve
@@ -33,14 +39,24 @@ def main(argv: list[str] | None = None) -> None:
     metrics = Metrics()
     metrics.set("panel_info", 1, version=__version__)
     if args.demo:
+        settings = demo_settings(settings)
         weather, feeds = DemoWeather(), demo_feeds()
+        ha, room = DemoHomeAssistant(settings), DemoRoom()
     else:
-        w = settings["weather"]
+        w, h, r = settings["weather"], settings["home_assistant"], settings["room"]
         weather = Weather(w["point"], w["poll_seconds"], metrics=metrics)
         feeds = feeds_mod.from_settings(settings, metrics)
-    for source in (weather, *feeds.values()):
+        ha = HomeAssistant(h["url"], h["token"], Controls.entities(settings), h["poll_seconds"], metrics)
+        room = None
+        if r["sensor"]:
+            room = Room(r["i2c_bus"], r["i2c_address"], r["offset"], r["poll_seconds"], metrics)
+    sources = [weather, *feeds.values(), ha]
+    if room is not None:
+        sources.append(room)
+    for source in sources:
         source.start()
-    panel = Panel(settings, weather, Perf(settings["perf"], metrics), metrics, feeds)
+    controls = Controls.from_settings(settings, ha, metrics, room)
+    panel = Panel(settings, weather, Perf(settings["perf"], metrics), metrics, feeds, controls)
     host = args.host or settings["server"]["host"]
     port = args.port or settings["server"]["port"]
     server = serve(panel, host, port)

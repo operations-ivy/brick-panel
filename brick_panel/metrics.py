@@ -18,6 +18,15 @@ HELP = {
     "panel_weather_temperature_fahrenheit": ("gauge", "Outside temperature, from the weather source."),
     "panel_feed_up": ("gauge", "1 while a homelab feed (board, prometheus, overwatch) answers, by feed."),
     "panel_feed_requests_total": ("counter", "Requests to the homelab's feeds, by feed and result."),
+    "panel_ha_up": ("gauge", "1 while Home Assistant answers."),
+    "panel_ha_requests_total": ("counter", "Requests to Home Assistant, by kind and result."),
+    "panel_commands_total": ("counter", "Commands sent to Home Assistant, by action."),
+    "panel_unlock_attempts_total": ("counter", "Codes tried on the keypad, by result."),
+    "panel_relocks_total": ("counter", "The panel lock closing, by reason (idle, button)."),
+    "panel_room_sensor_up": ("gauge", "1 while the room sensor reads."),
+    "panel_room_reads_total": ("counter", "Room sensor reads, by result."),
+    "panel_room_temperature_fahrenheit": ("gauge", "The room's temperature, offset applied."),
+    "panel_room_humidity_percent": ("gauge", "The room's relative humidity."),
     "panel_page_seen_timestamp_seconds": ("gauge", "When the kiosk's page last asked for its state."),
     "panel_screen": ("gauge", "1 for the screen being shown, by screen."),
     "panel_transitions_total": ("counter", "Screen changes, by result: smooth (no frame late) or janky."),
@@ -32,6 +41,8 @@ HELP = {
 KNOWN = {
     "panel_transitions_total": ("result", ("smooth", "janky")),
     "panel_transition_frames_total": ("result", ("on_time", "late")),
+    "panel_unlock_attempts_total": ("result", ("granted", "denied", "locked_out", "hard_locked", "no_code")),
+    "panel_relocks_total": ("reason", ("idle", "button")),
 }
 
 

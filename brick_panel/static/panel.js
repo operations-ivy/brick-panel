@@ -16,8 +16,6 @@ const ARM = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const OPPOSITE = { up: "down", down: "up", left: "right", right: "left" };
 // What each screen will hold, until its PR lands.
 const COMING = {
-  climate: "The thermostat: set point, mode and the room, behind the PIN and the lock key.",
-  lights: "Home Assistant's lights: on, off and brightness.",
   calendar: "The household calendar: today, then the weeks ahead.",
   shopping: "The shopping list: tick things off, see what's left.",
 };
@@ -132,6 +130,7 @@ async function go(name) {
   current = name;
   drawHints();
   hints.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, fill: "forwards" });
+  leaveControls(from.dataset.screen);
   if (name === "home") renderClock(true);
 
   const frames = stop();
@@ -172,6 +171,12 @@ function bandAt(x, y) {
 
 function tap(x, y, target) {
   if (busy) return;
+  // A button on an app screen comes first, even near an edge.
+  const button = current !== "home" && target.closest && target.closest("[data-act]");
+  if (button && screens[current].contains(button)) {
+    if (!button.disabled && ACTIONS[button.dataset.act]) ACTIONS[button.dataset.act](button.dataset.arg, button);
+    return;
+  }
   const board = target.closest && target.closest(".billboard");
   if (current === "home" && board) {
     board.classList.add("pressed");
@@ -188,8 +193,12 @@ function tap(x, y, target) {
 }
 
 const pointers = new Map();
+const PRESS = [{ transform: "scale(.93)" }, { transform: "scale(1)" }];
 stage.addEventListener("pointerdown", (e) => {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: e.timeStamp });
+  touched();
+  const button = e.target.closest && e.target.closest("[data-act]");
+  if (button && !button.disabled) button.animate(PRESS, { duration: 160, easing: "cubic-bezier(.2,.75,.2,1)" });
   if (pointers.size >= 2) { pointers.clear(); goAndReport("home"); }
 });
 stage.addEventListener("pointerup", (e) => {
@@ -279,6 +288,7 @@ function render() {
   renderWeather(screens.weather, state, backOf("weather"));
   renderBrick(screens.brick, state, backOf("brick"));
   renderAlerts(screens.alerts, state, backOf("alerts"));
+  renderControls();
   for (const name of Object.keys(COMING)) renderComing(name);
 }
 
