@@ -30,9 +30,10 @@ settings (`plus`, `billboards`).
 
 | Touch | Does |
 | --- | --- |
-| On Home, tap an edge (its green arrow) | slides to that arm's screen |
+| On Home, swipe (left pulls in the screen on the right; the green arrows say what's where) | slides to that arm's screen |
 | On Home, tap a billboard | zooms into its screen |
-| Elsewhere, tap the edge with the HOME arrow | back to Home |
+| On an arm, swipe back towards Home (the HOME arrow's side comes in) | back to Home |
+| In a billboard's screen, swipe up or down | back to Home |
 | Two-finger tap | Home, from anywhere |
 
 Built so far: Home, the navigation, and:
@@ -126,7 +127,7 @@ lights:
 room:
   sensor: true
 kiosk:
-  rotation: 270   # if the panel is turned the other way
+  rotation: 90    # if the panel is turned the other way
 ```
 
 The token and the code only ever go in that file (mode 600), never in git.

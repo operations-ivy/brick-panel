@@ -15,7 +15,9 @@ from brick_panel.demo import demo_settings
 from brick_panel.demo import DemoHomeAssistant
 from brick_panel.demo import DemoRoom
 from brick_panel.demo import DemoWeather
+from brick_panel.household import Household
 from brick_panel.metrics import Metrics
+from brick_panel.night import Night
 from brick_panel.perf import Perf
 from brick_panel.web import is_loopback
 from brick_panel.web import Panel
@@ -24,16 +26,19 @@ from brick_panel.web import STATIC
 from brick_panel.web import static_file
 
 
-def make_panel(settings, feeds=None, controls=None, metrics=None):
+def make_panel(settings, feeds=None, controls=None, metrics=None, household=None, night=None):
     metrics = metrics or Metrics()
-    return Panel(settings, DemoWeather(), Perf(settings["perf"], metrics), metrics, feeds or {}, controls)
+    perf = Perf(settings["perf"], metrics)
+    return Panel(settings, DemoWeather(), perf, metrics, feeds or {}, controls, household, night)
 
 
 @pytest.fixture
 def server(settings):
-    settings, metrics = demo_settings(settings), Metrics()
-    controls = Controls.from_settings(settings, DemoHomeAssistant(settings), metrics, DemoRoom())
-    panel = make_panel(settings, demo_feeds(), controls, metrics)
+    settings, metrics = demo_settings(settings, night=True), Metrics()
+    ha = DemoHomeAssistant(settings)
+    night = Night(settings["night"]["window"], 0.08, 1.0, 60, metrics=metrics)
+    controls = Controls.from_settings(settings, ha, metrics, DemoRoom(), night)
+    panel = make_panel(settings, demo_feeds(), controls, metrics, Household(settings, ha, metrics), night)
     srv = serve(panel, "127.0.0.1", 0)
     yield f"http://127.0.0.1:{srv.server_address[1]}", panel
     srv.shutdown()
@@ -129,6 +134,7 @@ def test_bench_round_trip(server):
 
 def test_controls_through_the_server(server):
     base, panel = server
+    post(base + "/api/wake", {})  # the fixture's always night: awake, or dark locks the controls
     assert post(base + "/api/climate", {"mode": "cool"})["why"] == "locked"
     assert post(base + "/api/unlock", {"code": "1982"})["result"] == "granted"
     answer = post(base + "/api/climate", {"setpoints": {"temperature": 72}})
@@ -140,13 +146,52 @@ def test_controls_through_the_server(server):
     assert state["home"]["lights"][0]["on"] is False
 
 
+def test_shopping_and_calendar_through_the_server(server):
+    base, _ = server
+    state = json.loads(get(base + "/api/state")[2])
+    items = state["household"]["shopping"]["items"]
+    assert state["household"]["calendar"]["available"]
+    first = items[0]
+    assert post(base + "/api/shopping", {"uid": first["uid"], "done": True}) == {"ok": True, "why": ""}
+    assert post(base + "/api/shopping", {"uid": "nope", "done": True})["ok"] is False
+    state = json.loads(get(base + "/api/state")[2])
+    assert next(i for i in state["household"]["shopping"]["items"] if i["uid"] == first["uid"])["done"]
+
+
+def test_night_wake_through_the_server(server):
+    base, _ = server
+    assert json.loads(get(base + "/api/state")[2])["night"]["dark"] is True
+    assert post(base + "/api/wake", {})["woke"] is True
+    answer = post(base + "/api/wake", {})
+    assert answer["woke"] is False and answer["dark"] is False
+
+
+def test_going_dark_locks_the_controls(server):
+    base, panel = server
+    post(base + "/api/wake", {})
+    assert post(base + "/api/unlock", {"code": "1982"})["result"] == "granted"
+    panel.night._awake_until = 0  # the wake runs out
+    assert json.loads(get(base + "/api/state")[2])["home"]["lock"]["unlocked"] is False
+    assert panel.metrics.get("panel_relocks_total", reason="dark") == 1
+
+
 def test_room_json(server):
     base, _ = server
     assert json.loads(get(base + "/room.json")[2]) == {"up": True, "temperature_f": 71.4, "humidity": 41.0}
 
 
 @pytest.mark.parametrize(
-    "path", ["/api/unlock", "/api/secure", "/api/touch", "/api/climate", "/api/light", "/api/bench"]
+    "path",
+    [
+        "/api/unlock",
+        "/api/secure",
+        "/api/touch",
+        "/api/climate",
+        "/api/light",
+        "/api/bench",
+        "/api/shopping",
+        "/api/wake",
+    ],
 )
 def test_controls_are_for_the_panel_only(server, monkeypatch, path):
     base, _ = server

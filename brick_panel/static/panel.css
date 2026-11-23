@@ -150,20 +150,53 @@ body {
 
 .billboards { position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 4; pointer-events: none; }
 .billboard {
-  position: absolute; width: 124px; height: 76px; padding: 7px 8px; pointer-events: auto;
-  background: #07061299; border: 2px solid var(--c); box-shadow: 0 0 10px var(--c), inset 0 0 10px #0008;
+  position: absolute; width: 124px; height: 76px; padding: 7px 9px; pointer-events: auto;
+  background: #070612e6; border: 2px solid #1d1a40;
+  /* a steel frame round the tube (.tube: the neon, on its own layer) */
+  box-shadow: 0 0 0 2px #05040c, 0 0 0 5px #2a2552, 0 0 0 6px #463f80, inset 0 0 12px #000a;
   display: flex; flex-direction: column; justify-content: space-between; text-align: left;
   font: inherit; color: inherit; cursor: none;
 }
-.billboard::after { /* the legs it stands on */
-  content: ""; position: absolute; left: 18px; right: 18px; bottom: -14px; height: 12px;
-  border-left: 3px solid #1b1838; border-right: 3px solid #1b1838;
+.billboard::before { /* the lamps' light washing down the face, and the frame's bolts */
+  content: ""; position: absolute; inset: -5px; pointer-events: none;
+  background:
+    radial-gradient(circle at 3px 3px, #6a62b0 1.5px, #0000 2px),
+    radial-gradient(circle at calc(100% - 3px) 3px, #6a62b0 1.5px, #0000 2px),
+    radial-gradient(circle at 3px calc(100% - 3px), #6a62b0 1.5px, #0000 2px),
+    radial-gradient(circle at calc(100% - 3px) calc(100% - 3px), #6a62b0 1.5px, #0000 2px),
+    radial-gradient(ellipse 30% 70% at 27% 0, #fff0c822, #0000),
+    radial-gradient(ellipse 30% 70% at 73% 0, #fff0c822, #0000);
+}
+/* The neon tube and the sign's name flicker slightly now and then, as old
+   neon does: opacity only, each sign on its own random pattern and pace
+   (--fa, --fd, --fdel from scene.js). ALERTS pulses instead, faster while
+   something's firing. */
+.billboard .tube {
+  position: absolute; inset: -2px; border: 2px solid var(--c); pointer-events: none; will-change: opacity;
+  box-shadow: 0 0 14px var(--c), inset 0 0 8px #ffffff14;
+}
+.billboard .tube, .billboard .name { animation: var(--fa, neon-a) var(--fd, 9s) linear infinite var(--fdel, 0s); }
+@keyframes neon-a {
+  0%, 31% { opacity: 1; } 31.4% { opacity: .72; } 31.9% { opacity: 1; } 32.3% { opacity: .85; } 32.8%, 100% { opacity: 1; }
+}
+@keyframes neon-b {
+  0%, 18% { opacity: 1; } 18.5% { opacity: .8; } 19%, 66% { opacity: 1; } 66.3% { opacity: .7; } 66.9%, 100% { opacity: 1; }
+}
+@keyframes neon-c {
+  0%, 52% { opacity: 1; } 52.3% { opacity: .78; } 52.7% { opacity: .95; } 53% { opacity: .74; } 53.6%, 100% { opacity: 1; }
+}
+.billboard.alerts .tube, .billboard.alerts .name { animation: pulse 3.2s ease-in-out infinite; }
+.billboard.alerts.lit .tube, .billboard.alerts.lit .name, .billboard.alerts.lit .val { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+.billboard .spill { /* its colour on the roof below */
+  position: absolute; left: -14px; right: -14px; height: 14px; pointer-events: none;
+  background: radial-gradient(ellipse 50% 50% at 50% 30%, var(--c), #0000); opacity: .28;
 }
 .billboard .name { font-family: var(--pixel); font-size: 11px; letter-spacing: 2px; color: var(--c);
   text-shadow: 0 0 6px var(--c); }
 .billboard .val { font-size: 25px; line-height: 1; color: var(--text); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; }
-.billboard.lit .val { color: var(--c); animation: blink 1.2s steps(2) infinite; }
+.billboard.lit .val { color: var(--c); animation: pulse 1.4s ease-in-out infinite; }
 .billboard.pressed { transform: scale(.96); }
 
 /* Rain: tall tiles sliding down forever, on the compositor. */
@@ -402,3 +435,85 @@ body {
 .kp-key.clear { --kc: var(--red); color: var(--red); }
 .kp-key.enter { --kc: var(--green); color: var(--green); }
 .kp-cancel { margin-top: 14px; width: 100%; height: 52px; }
+
+/* ---- Night: the screen goes black over everything, and stops moving ---- */
+#night { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 60; will-change: opacity; }
+#stage.dark * { animation-play-state: paused !important; }
+
+/* ---- CALENDAR ---- */
+.cal-head { display: grid; grid-template-columns: 56px 1fr 56px; gap: 8px; margin-bottom: 10px; }
+.key.cal-step { height: 44px; color: var(--c); --kc: var(--edge); }
+.key.cal-step .tri { width: 0; height: 0; border: 9px solid transparent; }
+.key.cal-step .tri.left { border-left-width: 0; border-right: 13px solid currentColor; }
+.key.cal-step .tri.right { border-right-width: 0; border-left: 13px solid currentColor; }
+.key.cal-step .tri.up { border-top-width: 0; border-bottom: 13px solid currentColor; }
+.key.cal-step .tri.down { border-bottom-width: 0; border-top: 13px solid currentColor; }
+.key.cal-name { height: 44px; font-size: 15px; letter-spacing: 3px; color: var(--c); text-shadow: 0 0 8px var(--c); }
+.cal-wd { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px;
+  font-family: var(--pixel); font-size: 9px; letter-spacing: 2px; color: var(--faint); text-align: center; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 14px; }
+.cal-day {
+  position: relative; height: 50px; font: inherit; color: var(--text); background: var(--panel);
+  border: 2px solid var(--edge); cursor: none; display: flex; flex-direction: column; justify-content: space-between;
+  align-items: flex-start; padding: 2px 5px 5px; will-change: transform;
+}
+.cal-grid.w6 .cal-day { height: 44px; }
+.cal-day .n { font-size: 22px; line-height: 1; }
+.cal-day .dots { display: flex; gap: 3px; align-items: center; height: 6px; }
+.cal-day .dots i { width: 6px; height: 6px; background: var(--c); box-shadow: 0 0 4px var(--c); }
+.cal-day .dots em { font-style: normal; font-size: 14px; line-height: 6px; color: var(--c); }
+.cal-day.now .dots i { background: var(--amber); box-shadow: 0 0 5px var(--amber); }
+.cal-day.past .dots i { background: var(--faint); box-shadow: none; }
+.cal-day.other { background: transparent; border-color: #1d1a4066; }
+.cal-day.other .n { color: var(--faint); }
+.cal-day.today { border-color: var(--c); box-shadow: 0 0 8px #00eaff66, inset 0 0 8px #00eaff33; }
+.cal-day.today .n { color: var(--c); text-shadow: var(--glow-cyan); }
+.cal-day.sel { background: #00eaff22; border-color: var(--c); }
+
+.panel-box.agenda .body { display: flex; flex-direction: column; gap: 2px; }
+.ag-day { font-family: var(--pixel); font-size: 10px; letter-spacing: 2px; color: var(--magenta); padding: 6px 0 1px;
+  border-top: 1px solid var(--edge); margin-top: 2px; }
+.ag-empty { font-size: 21px; line-height: 30px; color: var(--faint); }
+.ag-event { display: flex; align-items: baseline; gap: 10px; height: 32px; font: inherit; color: var(--text); text-align: left;
+  background: transparent; border: 0; cursor: none; min-width: 0; will-change: transform; }
+.ag-event .w { flex: none; width: 92px; font-family: var(--pixel); font-size: 10px; letter-spacing: 1px; color: var(--c); }
+.ag-event .t { flex: 1; min-width: 0; font-size: 23px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-event em { flex: none; font-style: normal; font-family: var(--pixel); font-size: 10px; letter-spacing: 1px; color: var(--void);
+  background: var(--amber); padding: 2px 5px 1px; }
+.ag-event.now .w, .ag-event.now .t { color: var(--amber); text-shadow: var(--glow-amber); }
+.ag-event.past .w, .ag-event.past .t { color: var(--faint); }
+
+/* An event's details: over the body, shown and hidden by opacity only. */
+.cal-detail {
+  position: absolute; top: 112px; left: 0; right: 0; bottom: 0; z-index: 5; padding: 18px 22px 0;
+  background: var(--void); visibility: hidden; pointer-events: none; will-change: transform, opacity;
+}
+.cal-detail.open { visibility: visible; pointer-events: auto; }
+.ev-title { font-family: var(--pixel); font-weight: 700; font-size: 20px; letter-spacing: 2px; line-height: 1.25; color: var(--c);
+  text-shadow: 0 0 8px var(--c); margin-bottom: 18px; max-height: 76px; overflow: hidden; }
+.ev-text { font-size: 24px; line-height: 1.1; color: var(--text); }
+.ev-text.notes { font-size: 22px; color: var(--dim); max-height: 220px; overflow: hidden; }
+.key.ev-back { width: 100%; color: var(--c); --kc: var(--c); }
+
+/* ---- SHOPPING ---- */
+.shop-sum { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 14px; }
+.shop-sum .v { font-size: 86px; line-height: .8; color: var(--c); text-shadow: 0 0 14px #39ff6a66; }
+.shop-sum .k { font-family: var(--pixel); font-size: 10px; letter-spacing: 2px; line-height: 1.6; color: var(--dim); }
+.shop-list { display: flex; flex-direction: column; gap: 6px; }
+.shop-item {
+  display: flex; align-items: center; gap: 14px; height: 54px; padding: 0 14px; font: inherit; font-size: 26px;
+  color: var(--text); text-align: left; background: var(--panel); border: 2px solid var(--edge); cursor: none;
+  min-width: 0; will-change: transform;
+}
+.shop-item span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop-item .check { position: relative; flex: none; width: 24px; height: 24px; border: 2px solid var(--c); }
+.shop-item.done { background: transparent; }
+.shop-item.done span { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--dim); }
+.shop-item.done .check { background: var(--c); box-shadow: 0 0 8px var(--c); }
+.shop-item.done .check::after { /* the tick */
+  content: ""; position: absolute; left: 6px; top: 1px; width: 7px; height: 13px;
+  border: solid var(--void); border-width: 0 3px 3px 0; transform: rotate(45deg);
+}
+.shop-item.flying { border-color: #39ff6a88; }
+.pager { display: grid; grid-template-columns: 56px 1fr 56px; gap: 8px; align-items: center; margin-top: 10px;
+  font-family: var(--pixel); font-size: 11px; letter-spacing: 2px; color: var(--dim); text-align: center; }

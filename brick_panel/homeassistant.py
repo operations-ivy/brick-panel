@@ -1,9 +1,9 @@
 """Home Assistant's REST API, from a background thread so a slow or missing
 Home Assistant never holds up the page. The panel reads the latest states
-(state(), value(), number()) and queues service calls (call()); the thread
+(state(), value(), number()), the shopping list's items (items()) and the
+calendars' events (events()), and queues service calls (call()); the thread
 does the talking, and polls again straight after a call so its result shows.
-Adapted from rpi_lcars' datasources/homeassistant.py (states and calls only;
-the to-do list and calendars come with their screens)."""
+Adapted from rpi_lcars' datasources/homeassistant.py."""
 
 from __future__ import annotations
 
@@ -13,11 +13,15 @@ import queue
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from collections.abc import Iterable
+from datetime import datetime
+from datetime import timezone
 from typing import Any
 
+from . import calendar as cal
 from .metrics import Metrics
 
 log = logging.getLogger(__name__)
@@ -33,13 +37,28 @@ class HomeAssistant(threading.Thread):
         metrics: Metrics | None = None,
         opener: Callable = urllib.request.urlopen,
         clock: Callable[[], float] = time.monotonic,
+        todo: str = "",
+        todo_seconds: float = 30,
+        calendars: Iterable[str] = (),
+        calendar_seconds: float = 300,
+        calendar_months: int = 2,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         super().__init__(name="homeassistant", daemon=True)
         self.url, self.token = url.rstrip("/"), token
         self.entities = list(dict.fromkeys(e for e in entities if e))
         self.poll_seconds = poll_seconds
         self.metrics, self.opener, self.clock = metrics, opener, clock
+        self.todo, self.todo_seconds = todo, todo_seconds
+        self.calendars = list(calendars)
+        self.calendar_seconds, self.calendar_months = calendar_seconds, calendar_months
+        self.now = now or (lambda: datetime.now().astimezone())
         self._states: dict[str, dict] = {}
+        self._items: list[dict] | None = None  # the shopping list, once fetched
+        self._next_items = 0.0
+        self._events: list[dict] | None = None  # every calendar's events, once all have answered
+        self._next_events = 0.0
+        self.events_updated: float | None = None  # clock() of the last full answer
         self._lock = threading.Lock()
         self._calls: queue.Queue = queue.Queue()
         self._stopping = threading.Event()
@@ -71,6 +90,29 @@ class HomeAssistant(threading.Thread):
             return float(raw)
         except ValueError:
             return default
+
+    def items(self) -> list[dict] | None:
+        """The shopping list's items ({"summary", "uid", "status"}), or None
+        before the first fetch."""
+        with self._lock:
+            return None if self._items is None else [dict(i) for i in self._items]
+
+    def set_item_status(self, uid: str, status: str) -> None:
+        """Show a change at once, before Home Assistant confirms it."""
+        with self._lock:
+            for item in self._items or []:
+                if item.get("uid") == uid:
+                    item["status"] = status
+
+    def events(self) -> list[dict] | None:
+        """Every calendar's events (calendar.parse()), or None before they've
+        all answered once. Kept while Home Assistant is down."""
+        with self._lock:
+            return None if self._events is None else list(self._events)
+
+    def events_age(self) -> float | None:
+        """Seconds since the calendars last all answered, or None."""
+        return None if self.events_updated is None else self.clock() - self.events_updated
 
     def call(self, domain: str, service: str, **data: object) -> None:
         self._calls.put((domain, service, data))
@@ -142,15 +184,63 @@ class HomeAssistant(threading.Thread):
             with self._lock:
                 self._states.update(states)
             self.error = ""
+            self._fetch_items()
+            self._fetch_events()
         self.connected = ok
         if self.metrics:
             self.metrics.set("panel_ha_up", 1 if ok else 0)
         return ok
 
+    def _fetch_items(self) -> None:
+        if not self.todo or self.clock() < self._next_items:
+            return
+        self._next_items = self.clock() + self.todo_seconds
+        try:
+            answer = self._request("POST", "/api/services/todo/get_items?return_response", {"entity_id": self.todo})
+            items = answer["service_response"][self.todo]["items"]
+            self._count("items", "ok")
+        except Exception as e:  # noqa: BLE001 - the list keeps its last items
+            self._count("items", "error")
+            log.warning("todo items %s: %s", self.todo, type(e).__name__)
+            return
+        with self._lock:
+            self._items = [i for i in items if isinstance(i, dict) and i.get("uid")]
+
+    def _fetch_events(self) -> None:
+        """All the calendars, the month grids from this month's for
+        calendar_months months, every calendar_seconds; all or nothing, so one
+        calendar failing never hides another's events behind a half answer.
+        Titles aren't logged."""
+        if not self.calendars or self.clock() < self._next_events:
+            return
+        self._next_events = self.clock() + self.calendar_seconds
+        now = self.now()
+        start, end = cal.window(now, self.calendar_months)
+        span = {"start": start.astimezone(timezone.utc).isoformat(), "end": end.astimezone(timezone.utc).isoformat()}
+        events = []
+        for entity in self.calendars:
+            try:
+                raw = self._request("GET", f"/api/calendars/{entity}?{urllib.parse.urlencode(span)}")
+                self._count("calendar", "ok")
+            except Exception as e:  # noqa: BLE001 - the calendars keep their last events
+                self._count("calendar", "error")
+                log.warning("calendar %s: %s", entity, type(e).__name__)
+                if self.metrics:
+                    self.metrics.set("panel_calendar_up", 0)
+                return
+            events += [e for e in (cal.parse(r, entity, now.tzinfo) for r in raw or []) if e]
+        with self._lock:
+            self._events = events
+        self.events_updated = self.clock()
+        if self.metrics:
+            self.metrics.set("panel_calendar_up", 1)
+
     def _call(self, domain: str, service: str, data: dict) -> None:
         try:
             self._request("POST", f"/api/services/{domain}/{service}", data)
             self._count("call", "ok")
+            if domain == "todo":
+                self._next_items = 0.0  # fetch the list again with the next poll
         except Exception as e:  # noqa: BLE001 - shown as COMMAND FAILED
             self._count("call", "error")
             self.error = "COMMAND FAILED"

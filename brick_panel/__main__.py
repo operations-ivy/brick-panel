@@ -17,7 +17,11 @@ from .demo import DemoHomeAssistant
 from .demo import DemoRoom
 from .demo import DemoWeather
 from .homeassistant import HomeAssistant
+from .household import Household
 from .metrics import Metrics
+from .night import Backlight
+from .night import Night
+from .night import sun_times
 from .perf import Perf
 from .room import Room
 from .weather import Weather
@@ -32,6 +36,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--demo", action="store_true", help="made-up data, no network (for a laptop)")
     parser.add_argument("--port", type=int, help="override server.port")
     parser.add_argument("--host", help="override server.host")
+    parser.add_argument("--night", action="store_true", help="with --demo: always night (to try the dark screen)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -39,14 +44,26 @@ def main(argv: list[str] | None = None) -> None:
     metrics = Metrics()
     metrics.set("panel_info", 1, version=__version__)
     if args.demo:
-        settings = demo_settings(settings)
+        settings = demo_settings(settings, night=args.night)
         weather, feeds = DemoWeather(), demo_feeds()
         ha, room = DemoHomeAssistant(settings), DemoRoom()
     else:
         w, h, r = settings["weather"], settings["home_assistant"], settings["room"]
         weather = Weather(w["point"], w["poll_seconds"], metrics=metrics)
         feeds = feeds_mod.from_settings(settings, metrics)
-        ha = HomeAssistant(h["url"], h["token"], Controls.entities(settings), h["poll_seconds"], metrics)
+        cal, shop = settings["calendar"], settings["shopping"]
+        ha = HomeAssistant(
+            h["url"],
+            h["token"],
+            [*Controls.entities(settings), settings["night"]["sun_entity"]],
+            h["poll_seconds"],
+            metrics,
+            todo=shop["entity"],
+            todo_seconds=shop["poll_seconds"],
+            calendars=cal["entities"],
+            calendar_seconds=cal["poll_seconds"],
+            calendar_months=cal["months"],
+        )
         room = None
         if r["sensor"]:
             room = Room(r["i2c_bus"], r["i2c_address"], r["offset"], r["poll_seconds"], metrics)
@@ -55,8 +72,21 @@ def main(argv: list[str] | None = None) -> None:
         sources.append(room)
     for source in sources:
         source.start()
-    controls = Controls.from_settings(settings, ha, metrics, room)
-    panel = Panel(settings, weather, Perf(settings["perf"], metrics), metrics, feeds, controls)
+    n = settings["night"]
+    night = Night(
+        n["window"],
+        n["level"],
+        n["day_level"],
+        n["wake_seconds"],
+        None if args.demo else Backlight(),
+        metrics,
+        sun=lambda: sun_times(ha.attrs(n["sun_entity"])),
+    )
+    night.start()
+    controls = Controls.from_settings(settings, ha, metrics, room, night)
+    household = Household(settings, ha, metrics)
+    perf = Perf(settings["perf"], metrics)
+    panel = Panel(settings, weather, perf, metrics, feeds, controls, household, night)
     host = args.host or settings["server"]["host"]
     port = args.port or settings["server"]["port"]
     server = serve(panel, host, port)

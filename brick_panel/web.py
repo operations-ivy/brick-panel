@@ -11,6 +11,8 @@ POST /api/unlock      {"code"}: open the panel lock; /api/secure closes it,
                       /api/touch keeps it open (a tap on the panel)
 POST /api/climate     {"setpoints": {...}} or {"mode"}: the thermostat
 POST /api/light       {"entity", "on", "pct"?}: a light
+POST /api/shopping    {"uid", "done"}: tick a shopping list item off, or back on
+POST /api/wake        a tap at night: wakes the screen, says if that's all it did
 GET  /room.json       the room sensor's reading, for Home Assistant
 GET  /metrics         Prometheus
 
@@ -44,7 +46,9 @@ if TYPE_CHECKING:
     from .demo import DemoWeather
     from .feeds import DemoFeed
     from .feeds import JsonFeed
+    from .household import Household
     from .metrics import Metrics
+    from .night import Night
     from .perf import Perf
     from .weather import Weather
 
@@ -56,7 +60,7 @@ mimetypes.add_type("font/woff2", ".woff2")
 mimetypes.add_type("text/javascript", ".js")
 MAX_BODY = 1 << 20
 CONTROLS = {"/api/unlock", "/api/secure", "/api/touch", "/api/climate", "/api/light"}
-LOCAL_ONLY = {"/api/bench", *CONTROLS}
+LOCAL_ONLY = {"/api/bench", "/api/shopping", "/api/wake", *CONTROLS}
 
 
 def is_loopback(client: str) -> bool:
@@ -116,6 +120,8 @@ class Panel:
     metrics: Metrics
     feeds: dict[str, JsonFeed | DemoFeed] = field(default_factory=dict)
     controls: Controls | None = None
+    household: Household | None = None
+    night: Night | None = None
 
     def screens(self) -> list[str]:
         return ["home", *self.settings["plus"].values(), *self.settings["billboards"]]
@@ -140,6 +146,8 @@ class Panel:
             "brick": brick_view(self.feed("board")),
             "feeds": {name: f.age() for name, f in self.feeds.items()},
             "home": self.controls.view() if self.controls else None,
+            "household": self.household.view() if self.household else None,
+            "night": self.night.view() if self.night else None,
             "bench": asdict(run) if (run := self.perf.pending()) else None,
         }
 
@@ -192,6 +200,15 @@ def handler(panel: Panel):
                 return self.send(403, b"only the panel itself can do that\n", "text/plain")
             if path == "/api/bench":
                 return self.send_json({"id": panel.perf.request_bench()})
+            if path == "/api/wake":
+                if panel.night is None:
+                    return self.send_json({"woke": False})
+                return self.send_json({"woke": panel.night.tap(), **panel.night.view()})
+            if path == "/api/shopping":
+                if panel.household is None:
+                    return self.send(404, b"no shopping list on this panel\n", "text/plain")
+                ok, why = panel.household.tick(body.get("uid"), body.get("done"))
+                return self.send_json({"ok": ok, "why": why})
             if path in CONTROLS:
                 if panel.controls is None:
                     return self.send(404, b"no controls on this panel\n", "text/plain")

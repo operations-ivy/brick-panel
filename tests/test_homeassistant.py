@@ -90,3 +90,72 @@ def test_no_token_never_talks():
     ha = HomeAssistant("http://ha", "", ["light.lamp"], opener=FakeHA({}, fail=AssertionError("called")))
     assert ha.error == "NO TOKEN"
     ha.run()  # returns at once
+
+
+class FakeLists(FakeHA):
+    """Home Assistant with a shopping list and calendars too."""
+
+    def __init__(self, states, items=None, calendars=None, broken=()):
+        super().__init__(states)
+        self.items, self.calendars, self.broken = items or [], calendars or {}, set(broken)
+        self.asked = []
+
+    def __call__(self, req, timeout):
+        path = req.full_url.split("://", 1)[1].split("/", 1)[1]
+        self.asked.append(path.split("?")[0])
+        if path.startswith("api/services/todo/get_items"):
+            entity = json.loads(req.data)["entity_id"]
+            return io.BytesIO(json.dumps({"service_response": {entity: {"items": self.items}}}).encode())
+        if path.startswith("api/calendars/"):
+            entity = path.removeprefix("api/calendars/").split("?")[0]
+            if entity in self.broken:
+                raise urllib.error.URLError("down")
+            return io.BytesIO(json.dumps(self.calendars.get(entity, [])).encode())
+        return super().__call__(req, timeout)
+
+
+class Ticker:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+
+def lists_ha(fake, clock, **kw):
+    return HomeAssistant("http://ha", "tok", ["sun.sun"], opener=fake, clock=clock, metrics=Metrics(), **kw)
+
+
+def test_shopping_list_items_on_their_own_schedule():
+    items = [{"uid": "a", "summary": "Milk", "status": "needs_action"}, {"summary": "no uid"}]
+    fake, clock = FakeLists({"sun.sun": state("above_horizon")}, items=items), Ticker()
+    ha = lists_ha(fake, clock, todo="todo.shopping_list", todo_seconds=30)
+    assert ha.items() is None
+    ha.poll()
+    assert ha.items() == [items[0]]
+    ha.set_item_status("a", "completed")
+    assert ha.items()[0]["status"] == "completed"
+    fake.asked.clear()
+    ha.poll()  # too soon for the list
+    assert "api/services/todo/get_items" not in fake.asked
+    ha._call("todo", "update_item", {"entity_id": "todo.shopping_list", "item": "a", "status": "completed"})
+    ha.poll()  # straight after a call: fetched again
+    assert "api/services/todo/get_items" in fake.asked
+
+
+def test_calendars_all_or_nothing():
+    event = {
+        "summary": "Dentist",
+        "start": {"dateTime": "2026-11-22T14:00:00-05:00"},
+        "end": {"dateTime": "2026-11-22T15:00:00-05:00"},
+    }
+    fake, clock = FakeLists({}, calendars={"calendar.a": [event], "calendar.b": []}), Ticker()
+    ha = lists_ha(fake, clock, calendars=["calendar.a", "calendar.b"], calendar_seconds=300)
+    ha.poll()
+    assert [e["summary"] for e in ha.events()] == ["Dentist"]
+    assert ha.events_age() == 0 and ha.metrics.get("panel_calendar_up") == 1
+    fake.broken.add("calendar.b")
+    clock.t = 301
+    ha.poll()
+    assert [e["summary"] for e in ha.events()] == ["Dentist"]  # kept, not half
+    assert ha.events_age() == 301 and ha.metrics.get("panel_calendar_up") == 0

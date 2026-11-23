@@ -23,10 +23,13 @@ const Scene = (() => {
     { x: 282, w: 142, roof: 582 },
     { x: 424, w: 56, roof: 436 },
   ];
+  // Each billboard stands RIG px above its roof: a catwalk under it, two
+  // braced girders down to the roof, and lamps over its top edge.
+  const BB_W = 124, BB_H = 76, RIG = 30;
   const BILLBOARDS = [
-    { x: 10, top: 568 - 90 },
-    { x: 150, top: 610 - 90 },
-    { x: 290, top: 582 - 90 },
+    { x: 10, top: 568 - BB_H - RIG, roof: 568 },
+    { x: 150, top: 610 - BB_H - RIG, roof: 610 },
+    { x: 290, top: 582 - BB_H - RIG, roof: 582 },
   ];
   const COLOURS = { alerts: "--red", calendar: "--cyan", shopping: "--green", weather: "--sodium",
     climate: "--rose", lights: "--amber", brick: "--violet" };
@@ -82,6 +85,59 @@ const Scene = (() => {
           }
         }
       }
+    }
+    paintRigs(g);
+  }
+
+  // The billboards' steelwork, painted once with the city (the signs
+  // themselves are buttons over it).
+  function paintRigs(g) {
+    const steel = "#2a2552", lit = "#463f80", dark = "#120f2c";
+    for (const b of BILLBOARDS) {
+      const x = b.x, bottom = b.top + BB_H - CITY_TOP, roof = b.roof - CITY_TOP, top = b.top - CITY_TOP;
+      // Girders: two posts, each a dark core with a lit edge.
+      for (const px of [x + 20, x + BB_W - 26]) {
+        g.fillStyle = steel;
+        g.fillRect(px, bottom, 6, roof - bottom);
+        g.fillStyle = lit;
+        g.fillRect(px, bottom, 1, roof - bottom);
+        g.fillStyle = dark;
+        g.fillRect(px - 3, roof - 3, 12, 3); // the foot plate
+      }
+      // X-bracing between them, below the catwalk.
+      const l = x + 26, r = x + BB_W - 26, y0 = bottom + 10, y1 = roof - 2;
+      g.strokeStyle = steel;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(l, y0); g.lineTo(r, y1);
+      g.moveTo(r, y0); g.lineTo(l, y1);
+      g.stroke();
+      // The catwalk: a deck wider than the sign, a railing on posts.
+      g.fillStyle = steel;
+      g.fillRect(x - 6, bottom + 6, BB_W + 12, 3);
+      g.fillStyle = lit;
+      g.fillRect(x - 6, bottom + 6, BB_W + 12, 1);
+      g.fillStyle = dark;
+      for (let rx = x - 4; rx <= x + BB_W + 4; rx += 12) g.fillRect(rx, bottom + 9, 1, 4);
+      // Lamps on arms over the top edge, hoods pointing down at the face.
+      for (const lx of [x + 28, x + BB_W - 34]) {
+        g.fillStyle = steel;
+        g.fillRect(lx + 2, top - 10, 2, 12); // the arm
+        g.fillStyle = lit;
+        g.fillRect(lx - 2, top - 13, 10, 4); // the hood
+        g.fillStyle = "rgba(255,240,200,0.9)";
+        g.fillRect(lx - 1, top - 9, 8, 1); // the bulb's line
+      }
+    }
+    // A parapet along the near roofs, so the signs have ground to stand on.
+    for (const b of NEAR) {
+      const t = b.roof - CITY_TOP;
+      g.fillStyle = "#2c2858";
+      g.fillRect(b.x, t, b.w, 3);
+      g.fillStyle = "#3d3878";
+      g.fillRect(b.x, t, b.w, 1);
+      g.fillStyle = "#14112f";
+      for (let px = b.x + 4; px < b.x + b.w - 2; px += 16) g.fillRect(px, t + 3, 3, 5);
     }
   }
 
@@ -151,8 +207,11 @@ const Scene = (() => {
   function billboards(el, names) {
     el.innerHTML = names.slice(0, 3).map((name, i) => {
       const b = BILLBOARDS[i];
-      return `<button class="billboard" data-open="${name}" style="left:${b.x}px;top:${b.top}px;--c:var(${COLOURS[name] || "--cyan"})">
-        <span class="name">${name.toUpperCase()}</span><span class="val">--</span></button>`;
+      // A slight flicker now and then: one of three patterns, its own pace
+      // and start, picked at random so no two signs flicker together.
+      const flicker = `--fa:neon-${"abc"[Math.floor(Math.random() * 3)]};--fd:${(7 + Math.random() * 9).toFixed(1)}s;--fdel:-${(Math.random() * 16).toFixed(1)}s`;
+      return `<button class="billboard ${name}" data-open="${name}" style="left:${b.x}px;top:${b.top}px;--c:var(${COLOURS[name] || "--cyan"});${flicker}">
+        <i class="tube"></i><span class="name">${name.toUpperCase()}</span><span class="val">--</span><i class="spill" style="top:${b.roof - b.top - 4}px"></i></button>`;
     }).join("");
   }
 

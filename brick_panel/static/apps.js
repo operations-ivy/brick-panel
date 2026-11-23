@@ -245,7 +245,7 @@ function renderAlerts(el, state, back) {
   const a = state.alerts || { condition: "UNKNOWN" };
   const feeds = state.feeds || {};
   const shell = appShell(el, "alerts", back);
-  setText(shell.kicker, "BRICK//1982 // ALERT CONDITION");
+  setText(shell.kicker, "STRAYLIGHT // ALERT CONDITION");
   badge(shell.badge, a.count ? `${a.count} ACTIVE` : "", a.count ? CONDITION_TONE[a.condition] : "");
 
   const banner = `<div class="condition ${CONDITION_TONE[a.condition]}"><span class="k">CONDITION</span>
