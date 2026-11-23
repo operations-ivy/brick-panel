@@ -7,31 +7,27 @@
 // change is a number on a graph, not a feeling.
 "use strict";
 
-const W = 480, H = 800, BAND = 64;
+const W = 480, H = 800;
 const SLIDE = { duration: 300, easing: "cubic-bezier(.2,.75,.2,1)", fill: "forwards" };
 const ZOOM = { duration: 280, easing: "cubic-bezier(.2,.75,.2,1)", fill: "forwards" };
 const POLL_MS = 5000;
 // Where each arm lies from Home: [dx, dy] in screens.
 const ARM = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const OPPOSITE = { up: "down", down: "up", left: "right", right: "left" };
-// What each screen will hold, until its PR lands.
-const COMING = {
-  calendar: "The household calendar: today, then the weeks ahead.",
-  shopping: "The shopping list: tick things off, see what's left.",
-};
-
 const stage = document.getElementById("stage");
 const screens = {};
 for (const el of stage.querySelectorAll(".screen")) screens[el.dataset.screen] = el;
 const home = screens.home;
 const hints = document.getElementById("hints");
 const staticEl = document.getElementById("static");
+const nightEl = document.getElementById("night");
 
 let state = null;
 let current = "home";
 let busy = false;
 let plus = { up: "weather", right: "climate", down: "lights", left: "brick" };
 let billboards = ["alerts", "calendar", "shopping"];
+let hanging = "alerts";
 
 // ---- Frame timing ----
 
@@ -131,6 +127,8 @@ async function go(name) {
   drawHints();
   hints.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, fill: "forwards" });
   leaveControls(from.dataset.screen);
+  leaveHousehold(from.dataset.screen);
+  if (name !== "home") Pizazz.stop(); // Home's covered now
   if (name === "home") renderClock(true);
 
   const frames = stop();
@@ -142,6 +140,52 @@ async function goAndReport(name) {
   const from = current;
   const frames = await go(name);
   if (frames) post("/api/perf", { from, to: name, frames });
+}
+
+// ---- Night ----
+// The server dims and darkens the backlight (night.py); the page follows it:
+// dark, it goes Home, stops its animations and swallows the first tap, which
+// only wakes the screen. awakeUntil is the page's own copy of the server's
+// wake, so that first tap is caught without waiting for a poll.
+
+let awakeUntil = 0, dark = false, lastWake = 0;
+
+function nightNow() {
+  return (state && state.night) || { is_night: false, wake_seconds: 60 };
+}
+
+function screenDark() {
+  return nightNow().is_night && performance.now() >= awakeUntil;
+}
+
+function applyDark() {
+  const d = screenDark();
+  if (d === dark || busy) return;
+  dark = d;
+  stage.classList.toggle("dark", d);
+  nightEl.animate([{ opacity: d ? 0 : 1 }, { opacity: d ? 1 : 0 }], { duration: d ? 900 : 160, fill: "forwards" });
+  if (d) {
+    Pizazz.stop();
+    leaveControls(current);
+    leaveHousehold(current);
+    jump("home");
+  } else {
+    render();
+  }
+}
+
+// A tap at night: wake (or stay awake). True when it only woke the screen.
+function nightTap() {
+  const n = nightNow();
+  if (!n.is_night) return false;
+  const woke = screenDark();
+  awakeUntil = performance.now() + n.wake_seconds * 1000;
+  if (woke || performance.now() - lastWake > 5000) {
+    lastWake = performance.now();
+    post("/api/wake", {});
+  }
+  applyDark();
+  return woke;
 }
 
 // ---- Touch ----
@@ -161,17 +205,33 @@ function drawHints() {
   }).join("");
 }
 
-function bandAt(x, y) {
-  if (y < BAND) return "up";
-  if (y > H - BAND) return "down";
-  if (x < BAND) return "left";
-  if (x > W - BAND) return "right";
+// A swipe: the finger's travel, if it went far enough, mostly one way.
+const SWIPE_PX = 50, SWIPE_MS = 700;
+function swipeDir(dx, dy) {
+  const ax = Math.abs(dx), ay = Math.abs(dy);
+  if (Math.max(ax, ay) < SWIPE_PX) return null;
+  if (ax > ay * 1.5) return dx < 0 ? "left" : "right";
+  if (ay > ax * 1.5) return dy < 0 ? "up" : "down";
   return null;
 }
 
-function tap(x, y, target) {
+// Swiping drags the plus: a swipe left brings in the screen on the right,
+// as if pulling it into view. On an app, the swipe that pulls Home back in
+// (towards its HOME arrow's opposite) goes Home; a billboard's app closes
+// with a swipe up or down.
+function swipe(dir) {
   if (busy) return;
-  // A button on an app screen comes first, even near an edge.
+  const toward = OPPOSITE[dir];
+  if (current === "home") {
+    if (plus[toward]) goAndReport(plus[toward]);
+  } else if (toward === backOf(current) || (placeOf(current) === "billboard" && (dir === "up" || dir === "down"))) {
+    goAndReport("home");
+  }
+}
+
+// A tap presses a button or opens a billboard; screens change by swiping.
+function tap(target) {
+  if (busy) return;
   const button = current !== "home" && target.closest && target.closest("[data-act]");
   if (button && screens[current].contains(button)) {
     if (!button.disabled && ACTIONS[button.dataset.act]) ACTIONS[button.dataset.act](button.dataset.arg, button);
@@ -183,18 +243,13 @@ function tap(x, y, target) {
     setTimeout(() => board.classList.remove("pressed"), 140);
     return goAndReport(board.dataset.open);
   }
-  const band = bandAt(x, y);
-  if (!band) return;
-  if (current === "home") {
-    if (plus[band]) goAndReport(plus[band]);
-  } else if (hintsFor(current).some((h) => h.dir === band)) {
-    goAndReport("home");
-  }
 }
 
 const pointers = new Map();
 const PRESS = [{ transform: "scale(.93)" }, { transform: "scale(1)" }];
 stage.addEventListener("pointerdown", (e) => {
+  if (nightTap()) { pointers.set(e.pointerId, { swallowed: true }); return; }
+  if ([...pointers.values()].some((p) => p.swallowed)) return;
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: e.timeStamp });
   touched();
   const button = e.target.closest && e.target.closest("[data-act]");
@@ -204,10 +259,17 @@ stage.addEventListener("pointerdown", (e) => {
 stage.addEventListener("pointerup", (e) => {
   const p = pointers.get(e.pointerId);
   pointers.delete(e.pointerId);
-  if (!p) return;
-  const r = stage.getBoundingClientRect();
-  const moved = Math.hypot(e.clientX - p.x, e.clientY - p.y);
-  if (moved < 24 && e.timeStamp - p.t < 800) tap(e.clientX - r.left, e.clientY - r.top, e.target);
+  if (!p || p.swallowed) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  const moved = Math.hypot(dx, dy);
+  if (moved < 24 && e.timeStamp - p.t < 800) {
+    tap(e.target);
+    RUM.tap(e.timeStamp);
+  }
+  else if (e.timeStamp - p.t < SWIPE_MS) {
+    const dir = swipeDir(dx, dy);
+    if (dir) swipe(dir);
+  }
 });
 stage.addEventListener("pointercancel", (e) => pointers.delete(e.pointerId));
 stage.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -245,6 +307,8 @@ function glitchSoon() {
   }, 20000 + Math.random() * 10000);
 }
 
+const BILLBOARD_TEXT = { alerts: alertsBillboard, calendar: calendarBillboard, shopping: shoppingBillboard };
+
 function renderHome() {
   const w = state.weather || {};
   const cur = w.current || {};
@@ -258,13 +322,10 @@ function renderHome() {
 
   for (const b of home.querySelectorAll(".billboard")) {
     const val = b.querySelector(".val");
-    if (b.dataset.open === "alerts") {
-      const { text, lit } = alertsBillboard(state);
-      setText(val, text);
-      b.classList.toggle("lit", lit);
-    } else {
-      setText(val, b.dataset.open === "calendar" ? "AGENDA" : "LIST");
-    }
+    const show = BILLBOARD_TEXT[b.dataset.open];
+    const { text, lit } = show ? show(state) : { text: "--", lit: false };
+    setText(val, text);
+    b.classList.toggle("lit", lit);
   }
 }
 
@@ -274,14 +335,6 @@ function backOf(name) {
   return place === "billboard" ? "down" : OPPOSITE[place] || "down";
 }
 
-function renderComing(name) {
-  const place = placeOf(name);
-  const shell = appShell(screens[name], name, backOf(name));
-  setText(shell.kicker, "BRICK//1982 // " + (place === "billboard" ? "BILLBOARD" : "ARM"));
-  paint(shell.body, `<div class="panel-box"><span class="tab">STANDBY</span><div class="body soon">
-    ${esc(COMING[name] || "")}<br><br><b>// NOT WIRED UP YET</b></div></div>`);
-}
-
 function render() {
   if (!state) return;
   renderHome();
@@ -289,7 +342,7 @@ function render() {
   renderBrick(screens.brick, state, backOf("brick"));
   renderAlerts(screens.alerts, state, backOf("alerts"));
   renderControls();
-  for (const name of Object.keys(COMING)) renderComing(name);
+  renderHousehold();
 }
 
 // ---- State ----
@@ -300,19 +353,27 @@ let hashDone = false;
 
 async function poll() {
   try {
+    const asked = performance.now();
     const r = await fetch("/api/state", { cache: "no-store" });
     const s = await r.json();
+    RUM.poll(performance.now() - asked);
     if (boot && s.boot !== boot) { location.reload(); return; }
     boot = s.boot;
     state = s;
     plus = s.plus || plus;
-    if (JSON.stringify(s.billboards) !== JSON.stringify(billboards)) {
+    if (JSON.stringify(s.billboards) !== JSON.stringify(billboards) || s.hanging !== hanging) {
       billboards = s.billboards;
-      Scene.build(home, billboards);
+      hanging = s.hanging;
+      Scene.build(home, billboards, hanging);
+    }
+    if (s.night && s.night.is_night) {
+      awakeUntil = Math.max(awakeUntil, performance.now() + s.night.awake_for * 1000);
     }
     home.querySelector(".link").classList.remove("down");
     setText(home.querySelector(".link-text"), "LINK");
-    if (!busy) render();
+    applyDark();
+    if (!busy && !dark) render();
+    if (!busy) Pizazz.prepare();
     if (!hashDone) { hashDone = true; if (location.hash.length > 1) jump(location.hash.slice(1)); }
     if (s.bench && s.bench.id !== benchSeen) { benchSeen = s.bench.id; bench(s.bench); }
   } catch (e) {
@@ -323,8 +384,9 @@ async function poll() {
 
 // ---- Bench ----
 
-// Round the plus and through every billboard, `rounds` times, timing every
-// frame; deploy/bench asked for it and reads the verdict.
+// Round the plus and through every billboard, `rounds` times, then Home's
+// three surprises, timing every frame; deploy/bench asked for it and reads
+// the verdict.
 async function bench(run) {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const tour = [];
@@ -339,10 +401,20 @@ async function bench(run) {
       if (f) frames.push(...f);
     }
   }
+  // Then Home's surprises, each timed while it plays (when there are names).
+  if (current !== "home") await go("home");
+  for (let i = 0; i < 3; i++) {
+    await wait(300);
+    const stop = recordFrames();
+    if (Pizazz.play(i)) await Pizazz.wait();
+    const f = stop();
+    if (f.length > 2) frames.push(...f.slice(1));
+  }
   post(`/api/bench/${run.id}`, { frames });
 }
 
-// A screen straight away, no animation: for previews (index.html#weather).
+// A screen straight away, no animation: for previews (index.html#weather),
+// and Home when the screen goes dark.
 function jump(name) {
   if (!screens[name] || name === current) return;
   screens[current].classList.remove("live");
@@ -353,10 +425,13 @@ function jump(name) {
 
 // ---- Start ----
 
-Scene.build(home, billboards);
+Scene.build(home, billboards, hanging);
 drawHints();
 renderClock(true);
 setInterval(() => renderClock(false), 1000);
 glitchSoon();
+Pizazz.start(home);
+RUM.start();
 poll();
 setInterval(poll, POLL_MS);
+setInterval(applyDark, 1000);

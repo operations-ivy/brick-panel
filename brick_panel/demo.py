@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
+from datetime import timedelta
 
+from . import calendar as cal
 from .feeds import DemoFeed
 
 
@@ -130,15 +133,88 @@ def demo_feeds() -> dict[str, DemoFeed]:
     return {"board": DemoFeed(board), "prometheus": DemoFeed(prometheus), "overwatch": DemoFeed(overwatch)}
 
 
-def demo_settings(settings: dict) -> dict:
-    """The settings --demo needs: a code (1982) and two lights, unless the
-    settings have their own."""
+def demo_settings(settings: dict, night: bool = False) -> dict:
+    """The settings --demo needs: a code (1982), two lights and a calendar,
+    unless the settings have their own; never dark, unless night (then always)."""
     settings["climate"]["pin"] = settings["climate"]["pin"] or "1982"
     settings["lights"]["entities"] = settings["lights"]["entities"] or {
         "light.lamp": "Desk",
         "light.bedside": "Bedside",
     }
+    settings["calendar"]["entities"] = settings["calendar"]["entities"] or ["calendar.demo"]
+    settings["night"]["window"] = "00:00-23:59" if night else ""
     return settings
+
+
+def demo_events(now: datetime) -> list[dict]:
+    """A month with something on most screens' worth of days: one starting
+    soon, one running, one over, an all-day, a trip over three days."""
+    day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def timed(start: datetime, minutes: int, summary: str, **more: str) -> dict:
+        end = start + timedelta(minutes=minutes)
+        return {
+            "summary": summary,
+            "start": {"dateTime": start.isoformat()},
+            "end": {"dateTime": end.isoformat()},
+            **more,
+        }
+
+    def at(days: int, hour: float, minutes: int, summary: str, **more: str) -> dict:
+        return timed(day + timedelta(days=days, hours=hour), minutes, summary, **more)
+
+    def all_day(days: int, length: int, summary: str) -> dict:
+        start = (day + timedelta(days=days)).date()
+        return {
+            "summary": summary,
+            "start": {"date": start.isoformat()},
+            "end": {"date": (start + timedelta(days=length)).isoformat()},
+        }
+
+    soon = now + timedelta(minutes=12)
+    raw = [
+        all_day(0, 1, "Recycling out"),
+        at(0, 7.5, 30, "Coffee with the neighbours"),
+        timed(
+            soon,
+            45,
+            "Dentist",
+            location="Suite 200, the clinic on the corner",
+            description="<p>Bring the insurance card.</p><p>Cleaning and X-rays.</p>",
+        ),
+        at(0, 19, 120, "Movie night"),
+        at(1, 9, 60, "Plumber visit", description="Kitchen sink, back left."),
+        at(1, 18.5, 90, "Climbing gym"),
+        all_day(3, 3, "Trip to the coast"),
+        at(5, 12, 60, "Lunch with Sam"),
+        at(8, 10, 30, "Car service"),
+        at(8, 15, 60, "Haircut"),
+        at(8, 17, 60, "Book club"),
+        at(8, 20, 60, "Call home"),
+        at(12, 14, 60, "Vet: annual checkup"),
+        at(17, 8, 600, "Work offsite"),
+        at(23, 19, 180, "Concert"),
+        at(-2, 10, 60, "Farmers market"),
+    ]
+    return [e for e in (cal.parse(r, "calendar.demo", now.tzinfo) for r in raw) if e]
+
+
+DEMO_ITEMS = [
+    "Milk",
+    "Eggs",
+    "Coffee beans",
+    "Dish soap",
+    "Bananas",
+    "Tortillas",
+    "Olive oil",
+    "AA batteries",
+    "Cat food",
+    "Lemons",
+    "Sourdough",
+    "Paper towels",
+    "Greek yogurt",
+    "Spinach",
+]
 
 
 class DemoRoom:
@@ -184,6 +260,28 @@ class DemoHomeAssistant:
         for i, entity in enumerate(settings["lights"]["entities"]):
             on = i == 0
             self.states[entity] = {"state": "on" if on else "off", "attributes": {"brightness": 178 if on else None}}
+        self._events = demo_events(self.now())
+        self._items = [
+            {"uid": f"item-{i}", "summary": name, "status": "completed" if i in (2, 6) else "needs_action"}
+            for i, name in enumerate(DEMO_ITEMS)
+        ]
+
+    def now(self) -> datetime:
+        return datetime.now().astimezone()
+
+    def events(self) -> list[dict]:
+        return list(self._events)
+
+    def events_age(self) -> float:
+        return 0.0
+
+    def items(self) -> list[dict]:
+        return [dict(i) for i in self._items]
+
+    def set_item_status(self, uid: str, status: str) -> None:
+        for item in self._items:
+            if item["uid"] == uid:
+                item["status"] = status
 
     def state(self, entity_id: str) -> dict | None:
         return self.states.get(entity_id)
@@ -201,6 +299,9 @@ class DemoHomeAssistant:
             return default
 
     def call(self, domain: str, service: str, **data: object) -> None:
+        if domain == "todo":
+            self.set_item_status(data["item"], data["status"])
+            return
         entity = data.pop("entity_id")
         s = self.states[entity]
         attrs = s["attributes"]

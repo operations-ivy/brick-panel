@@ -68,9 +68,10 @@ class Controls:
     lock: L.PanelLock
     metrics: Metrics
     room: object = None  # room.Room, when the panel has the sensor
+    night: object = None  # night.Night: going dark locks the controls
 
     @classmethod
-    def from_settings(cls, settings: dict, ha, metrics: Metrics, room=None) -> Controls:
+    def from_settings(cls, settings: dict, ha, metrics: Metrics, room=None, night=None) -> Controls:
         c = settings["climate"]
         lock = L.PanelLock(
             c["pin"],
@@ -79,7 +80,7 @@ class Controls:
             c["lockout_seconds"],
             c["max_lockout_seconds"],
         )
-        return cls(settings, ha, lock, metrics, room)
+        return cls(settings, ha, lock, metrics, room, night)
 
     @staticmethod
     def entities(settings: dict) -> list[str]:
@@ -135,6 +136,9 @@ class Controls:
         self.lock.set_remote(self.ha.value(self.settings["climate"]["lock_entity"]))
         if self.lock.relock_if_idle():
             self.metrics.inc("panel_relocks_total", reason="idle")
+        elif self.lock.unlocked and self.night is not None and self.night.dark:
+            self.lock.lock()
+            self.metrics.inc("panel_relocks_total", reason="dark")
         lock = self.lock
         return {
             "can_change": self.can_change,

@@ -11,6 +11,9 @@ POST /api/unlock      {"code"}: open the panel lock; /api/secure closes it,
                       /api/touch keeps it open (a tap on the panel)
 POST /api/climate     {"setpoints": {...}} or {"mode"}: the thermostat
 POST /api/light       {"entity", "on", "pct"?}: a light
+POST /api/shopping    {"uid", "done"}: tick a shopping list item off, or back on
+POST /api/wake        a tap at night: wakes the screen, says if that's all it did
+POST /api/rum         the page's real-user report (rum.py)
 GET  /room.json       the room sensor's reading, for Home Assistant
 GET  /metrics         Prometheus
 
@@ -22,7 +25,10 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import mimetypes
+import os
+import re
 import threading
 import time
 from dataclasses import asdict
@@ -35,6 +41,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from . import __version__
+from . import rum
 from .homelab import alerts_view
 from .homelab import brick_view
 from .homelab import weather_alerts
@@ -44,10 +51,13 @@ if TYPE_CHECKING:
     from .demo import DemoWeather
     from .feeds import DemoFeed
     from .feeds import JsonFeed
+    from .household import Household
     from .metrics import Metrics
+    from .night import Night
     from .perf import Perf
     from .weather import Weather
 
+log = logging.getLogger(__name__)
 STATIC = (Path(__file__).parent / "static").resolve()
 # Changes every start, e.g. after a deploy: the page reloads itself when it
 # sees a new one, so it always runs the code the server came with.
@@ -56,7 +66,7 @@ mimetypes.add_type("font/woff2", ".woff2")
 mimetypes.add_type("text/javascript", ".js")
 MAX_BODY = 1 << 20
 CONTROLS = {"/api/unlock", "/api/secure", "/api/touch", "/api/climate", "/api/light"}
-LOCAL_ONLY = {"/api/bench", *CONTROLS}
+LOCAL_ONLY = {"/api/bench", "/api/shopping", "/api/wake", "/api/rum", *CONTROLS}
 
 
 def is_loopback(client: str) -> bool:
@@ -64,6 +74,19 @@ def is_loopback(client: str) -> bool:
         return ipaddress.ip_address(client).is_loopback
     except ValueError:
         return False
+
+
+def surprise_names(raw: str | None = None) -> list[str]:
+    """Home's three surprises (a plane's banner, the city's windows, the
+    tower's sign) each spell a name, from BRICK_PANEL_NAMES: three names,
+    comma separated. They're people's names, so they live only in the
+    panel's env file, never in git. Not three: no surprises."""
+    raw = os.environ.get("BRICK_PANEL_NAMES", "") if raw is None else raw
+    names = [re.sub(r"[^A-Z]", "", n.upper())[:8] for n in raw.split(",")]
+    names = [n for n in names if n]
+    if raw.strip() and len(names) != 3:
+        log.warning("BRICK_PANEL_NAMES needs three names; got %d, so no surprises", len(names))
+    return names if len(names) == 3 else []
 
 
 def static_file(path: str) -> Path | None:
@@ -116,6 +139,9 @@ class Panel:
     metrics: Metrics
     feeds: dict[str, JsonFeed | DemoFeed] = field(default_factory=dict)
     controls: Controls | None = None
+    household: Household | None = None
+    night: Night | None = None
+    names: list[str] = field(default_factory=list)  # surprise_names()
 
     def screens(self) -> list[str]:
         return ["home", *self.settings["plus"].values(), *self.settings["billboards"]]
@@ -125,7 +151,9 @@ class Panel:
         f = self.feeds.get(name)
         return f.fresh() if f is not None else None
 
-    def state(self) -> dict:
+    def state(self, *, local: bool = False) -> dict:
+        """What the page shows. The surprise names go only to the panel's own
+        page (local), never to a browser on the LAN."""
         s, now = self.settings, time.time()
         warnings = self.weather.alerts()  # once, so WEATHER and ALERTS agree
         return {
@@ -134,13 +162,17 @@ class Panel:
             "clock": s["clock"],
             "plus": s["plus"],
             "billboards": s["billboards"],
+            "hanging": s["hanging"],
             "perf": {"budget_ms": self.perf.budget, "late_ms": self.perf.late_after},
             "weather": weather_state(self.weather, warnings),
             "alerts": alerts_view(self.feed("prometheus"), self.feed("overwatch"), warnings, now),
             "brick": brick_view(self.feed("board")),
             "feeds": {name: f.age() for name, f in self.feeds.items()},
             "home": self.controls.view() if self.controls else None,
+            "household": self.household.view() if self.household else None,
+            "night": self.night.view() if self.night else None,
             "bench": asdict(run) if (run := self.perf.pending()) else None,
+            "names": self.names if local else [],
         }
 
 
@@ -151,9 +183,10 @@ def handler(panel: Panel):
         def do_GET(self):
             path = urlsplit(self.path).path
             if path == "/api/state":
-                if is_loopback(self.client_address[0]):
+                local = is_loopback(self.client_address[0])
+                if local:
                     panel.metrics.set("panel_page_seen_timestamp_seconds", time.time())
-                return self.send_json(panel.state())
+                return self.send_json(panel.state(local=local))
             if path == "/api/bench":
                 return self.send_json(asdict(panel.perf.last_bench) if panel.perf.last_bench else {})
             if path == "/room.json":
@@ -192,6 +225,20 @@ def handler(panel: Panel):
                 return self.send(403, b"only the panel itself can do that\n", "text/plain")
             if path == "/api/bench":
                 return self.send_json({"id": panel.perf.request_bench()})
+            if path == "/api/wake":
+                # Without night there's nothing to wake: an answer, not an
+                # error, as the page asks on every tap at night.
+                if panel.night is None:
+                    return self.send_json({"woke": False})
+                return self.send_json({"woke": panel.night.tap(), **panel.night.view()})
+            if path == "/api/rum":
+                rum.record(panel.metrics, body, panel.perf.late_after, panel.screens())
+                return self.send_json({})
+            if path == "/api/shopping":
+                if panel.household is None:
+                    return self.send(404, b"no shopping list on this panel\n", "text/plain")
+                ok, why = panel.household.tick(body.get("uid"), body.get("done"))
+                return self.send_json({"ok": ok, "why": why})
             if path in CONTROLS:
                 if panel.controls is None:
                     return self.send(404, b"no controls on this panel\n", "text/plain")

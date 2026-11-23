@@ -24,18 +24,20 @@ and it holds the panel's own sensor, PIN and Home Assistant token.
 
 Home is a rainy neon city at night: a neon-tube clock that glitches every
 20-30 s, the date, the forecast, and a skyline whose weather follows the real
-one (rain when it rains, stars on a clear night). Three rooftop billboards
-open **ALERTS**, **CALENDAR** and **SHOPPING**. Arms and billboards are
-settings (`plus`, `billboards`).
+one (rain when it rains, stars on a clear night). Billboards on the rooftops
+open **CALENDAR** and **SHOPPING**, and **ALERTS** hangs on chains from the
+top edge. Arms and billboards are settings (`plus`, `billboards`,
+`hanging`).
 
 | Touch | Does |
 | --- | --- |
-| On Home, tap an edge (its green arrow) | slides to that arm's screen |
+| On Home, swipe (left pulls in the screen on the right; the green arrows say what's where) | slides to that arm's screen |
 | On Home, tap a billboard | zooms into its screen |
-| Elsewhere, tap the edge with the HOME arrow | back to Home |
+| On an arm, swipe back towards Home (the HOME arrow's side comes in) | back to Home |
+| In a billboard's screen, swipe up or down | back to Home |
 | Two-finger tap | Home, from anywhere |
 
-Built so far: Home, the navigation, and:
+The screens:
 
 - **WEATHER**: now (conditions, humidity, wind), the weather service's
   warnings, the next three days' temperatures as one line, and six forecast
@@ -57,7 +59,48 @@ Built so far: Home, the navigation, and:
 - **LIGHTS**: each light in `lights.entities` with its brightness, - and +,
   and on/off.
 
-CALENDAR and SHOPPING come next (their screens say so for now). There is no slideshow, and won't be: no photos on brick1982 (the user,
+- **CALENDAR**: Home Assistant's calendars (`calendar.entities`): the month
+  as a grid (a dot per event, today outlined), and an agenda from the day
+  tapped (today at first) on through the days after. Events starting within
+  15 minutes or running now are amber; a tap opens one's time, place and
+  notes. This month and next. The billboard shows what's left today, or
+  counts down to the next event.
+- **SHOPPING**: Home Assistant's to-do list (`shopping.entity`), needed
+  first; a tap ticks an item off or back on, paged 8 at a time. Open to
+  anyone, as on LCARS (it isn't the thermostat), but still only items on the
+  list, from the Pi itself.
+
+Titles, places and notes never go to the log or the metrics.
+
+## Home's surprises
+
+Every few minutes, one of three: a plane crosses the sky towing a banner,
+the city's windows drift together into letters and apart again, or the
+tower's BRICK sign shorts out and comes back as a word for a few seconds.
+Each spells a name from `BRICK_PANEL_NAMES` (three, comma separated, e.g.
+`BRICK_PANEL_NAMES=ALPHA,BRAVO,CHARLIE`). They're people's names, so they live
+only in the panel's env file (`~/.config/brick-panel/env`), never in git, and
+the server gives them only to the panel's own page, never to a browser on
+the LAN. Not set (or not three): no surprises. `deploy/bench` times them too.
+
+## Real user monitoring
+
+The page reports how it's doing every 30 s (`static/rum.js`, `rum.py`), as
+`panel_rum_*` metrics: each tap's time to the next frame (fast under 100 ms,
+ok under 200 ms, slow), long tasks, a few seconds of frames sampled each
+minute on the screen that's up, errors (also logged, so in Loki), memory,
+uptime, and how long the state polls take.
+
+## Night
+
+`night.window` (`21:00-07:00` by default; either end can be `sunset` or
+`sunrise`, from Home Assistant's `sun.sun`; empty for never) turns the
+backlight off and the page black, Home, still. A tap wakes it at
+`night.level` (8%) for `night.wake_seconds` (60 s), and only wakes it:
+nothing under the finger is pressed. Going dark locks the controls. The
+backlight level is `panel_backlight_level` in Prometheus.
+
+There is no slideshow, and won't be: no photos on brick1982 (the user,
 2026-11-22).
 
 ## The controls and the lock
@@ -104,7 +147,9 @@ Smooth screen changes are the first requirement, so the page is built around the
   0 late. With WEATHER, BRICK and ALERTS built (PR 2), three runs: 742, 737
 and 734 frames, the same p95 and worst, 0 late. With CLIMATE and LIGHTS on
 live Home Assistant data (PR 3), six runs: p95 16.7 ms each time; one run
-had one dropped frame (33 ms, 0.3% late), the other five none.
+had one dropped frame (33 ms, 0.3% late), the other five none. With CALENDAR,
+SHOPPING, the billboards' rigs and their flicker (PR 4), three runs: 750, 754
+and 754 frames, p95 16.7 ms, worst 16.8 ms, 0 late.
 
 ## Settings
 
@@ -123,10 +168,12 @@ climate:
 lights:
   entities:
     light.lamp: Office
+calendar:
+  entities: [calendar.home]   # its name can say where the house is: only here
 room:
   sensor: true
 kiosk:
-  rotation: 270   # if the panel is turned the other way
+  rotation: 90    # if the panel is turned the other way
 ```
 
 The token and the code only ever go in that file (mode 600), never in git.
@@ -169,7 +216,9 @@ panel-select neon                   # or: panel-select lcars
 - `panel-select` switches between the neon panel and LCARS. Only one runs at
   a time, and only that panel's deploy timer is on.
 - `brick-panel-deploy.timer` (a user unit, every 2 hours) follows
-  `deploy.branch` (`main` by default). It tests the new commit in a scratch
+  `BRICK_PANEL_DEPLOY_BRANCH` in `~/.config/brick-panel/env` (`main` by
+  default), which Jenkins' `deploy-brick-panel` job sets (brick-cicd-config;
+  don't edit it by hand). It tests the new commit in a scratch
   worktree, switches only if the tests pass, and restarts the server. The
   page sees the server's new start and reloads itself. Rerun
   `deploy/install.sh` after a change under `deploy/`.

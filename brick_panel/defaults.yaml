@@ -7,12 +7,12 @@ server:
   port: 8767
 
 kiosk:
-  # The panel's output and its rotation, as wlr-randr's --transform. The 7"
-  # panel is 800x480; turned 90 degrees clockwise on the wall it needs the
-  # picture turned 90 the other way, which is Wayland's "90". Use 270 if the
+  # The panel's output and its rotation, as wlr-randr's --transform (touch
+  # follows). The 7" panel is 800x480; turned 90 degrees clockwise on the
+  # wall, it's upright at 270 (seen on brick1982, 2026-11-22). Use 90 if the
   # panel is turned the other way.
   output: DSI-1
-  rotation: 90
+  rotation: 270
 
 clock:
   hours: 12  # or 24
@@ -82,6 +82,33 @@ lights:
   entities: {}
   step_pct: 10
 
+calendar:
+  # CALENDAR: Home Assistant calendar entities (e.g. Google Calendar through
+  # its integration). Their names can say where the house is, so they go only
+  # in the panel's own settings file, never here. Empty: CALENDAR says so.
+  entities: []
+  # This month and the months after it, fetched every poll_seconds; events
+  # older than stale_seconds are shown with how old they are.
+  months: 2
+  poll_seconds: 300
+  stale_seconds: 1800
+
+shopping:
+  # SHOPPING: Home Assistant's to-do list. Empty: SHOPPING says so.
+  entity: todo.shopping_list
+  poll_seconds: 30
+
+night:
+  # Dark overnight: "HH:MM-HH:MM" (may wrap past midnight), and either end
+  # may be sunset or sunrise (Home Assistant's sun.sun). Empty: never dark.
+  # A tap wakes the screen for wake_seconds, dimmed to level (0-1); that
+  # first tap presses nothing. Going dark locks the controls.
+  window: "21:00-07:00"
+  level: 0.08
+  day_level: 1.0
+  wake_seconds: 60
+  sun_entity: sun.sun
+
 room:
   # The SHT3x on the Pi's I2C bus: upstairs on CLIMATE, and /room.json for
   # Home Assistant's sensor.bedroom_*. The Pi warms the air near it: offset
@@ -99,8 +126,11 @@ plus:
   down: lights
   left: brick
 
-# Home's rooftop billboards, left to right; each opens its screen.
+# Home's billboards; each opens its screen. They stand on the rooftops, left
+# to right, except the one named by hanging, which hangs on chains from the
+# top edge (empty: none hangs).
 billboards: [alerts, calendar, shopping]
+hanging: alerts
 
 perf:
   # A frame later than budget x late_factor is late (one missed vsync).
@@ -110,8 +140,3 @@ perf:
   bench_p95_ms: 20
   bench_late_ratio: 0.05
   bench_rounds: 3
-
-deploy:
-  # The branch deploy/deploy follows. Point it at a branch to try that on
-  # the real panel; set it back to main after merging.
-  branch: main
