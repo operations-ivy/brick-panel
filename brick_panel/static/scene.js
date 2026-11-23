@@ -31,10 +31,12 @@ const Scene = (() => {
     { x: 150, top: 610 - BB_H - RIG, roof: 610 },
     { x: 290, top: 582 - BB_H - RIG, roof: 582 },
   ];
+  // Which rooftops the billboards take, by how many there are.
+  const SLOTS = { 1: [1], 2: [0, 2], 3: [0, 1, 2] };
   const COLOURS = { alerts: "--red", calendar: "--cyan", shopping: "--green", weather: "--sodium",
     climate: "--rose", lights: "--amber", brick: "--violet" };
 
-  function paintCity(canvas) {
+  function paintCity(canvas, rigs) {
     const g = canvas.getContext("2d", { alpha: true });
     const r = rng(1982);
     g.clearRect(0, 0, W, CITY_H);
@@ -86,14 +88,14 @@ const Scene = (() => {
         }
       }
     }
-    paintRigs(g);
+    paintRigs(g, rigs);
   }
 
   // The billboards' steelwork, painted once with the city (the signs
   // themselves are buttons over it).
-  function paintRigs(g) {
+  function paintRigs(g, rigs) {
     const steel = "#2a2552", lit = "#463f80", dark = "#120f2c";
-    for (const b of BILLBOARDS) {
+    for (const b of rigs) {
       const x = b.x, bottom = b.top + BB_H - CITY_TOP, roof = b.roof - CITY_TOP, top = b.top - CITY_TOP;
       // Girders: two posts, each a dark core with a lit edge.
       for (const px of [x + 20, x + BB_W - 26]) {
@@ -204,25 +206,42 @@ const Scene = (() => {
     });
   }
 
-  function billboards(el, names) {
-    el.innerHTML = names.slice(0, 3).map((name, i) => {
-      const b = BILLBOARDS[i];
-      // A slight flicker now and then: one of three patterns, its own pace
-      // and start, picked at random so no two signs flicker together.
-      const flicker = `--fa:neon-${"abc"[Math.floor(Math.random() * 3)]};--fd:${(7 + Math.random() * 9).toFixed(1)}s;--fdel:-${(Math.random() * 16).toFixed(1)}s`;
-      return `<button class="billboard ${name}" data-open="${name}" style="left:${b.x}px;top:${b.top}px;--c:var(${COLOURS[name] || "--cyan"});${flicker}">
-        <i class="tube"></i><span class="name">${name.toUpperCase()}</span><span class="val">--</span><i class="spill" style="top:${b.roof - b.top - 4}px"></i></button>`;
-    }).join("");
+  // A slight flicker now and then: one of three patterns, its own pace and
+  // start, picked at random so no two signs flicker together.
+  function flicker() {
+    return `--fa:neon-${"abc"[Math.floor(Math.random() * 3)]};--fd:${(7 + Math.random() * 9).toFixed(1)}s;--fdel:-${(Math.random() * 16).toFixed(1)}s`;
   }
 
-  function build(home, names) {
-    paintCity(home.querySelector(".city"));
+  function face(name) {
+    return `<i class="tube"></i><span class="name">${name.toUpperCase()}</span><span class="val">--</span>`;
+  }
+
+  // The rooftop billboards, and the one hanging from the top edge on chains.
+  function billboards(el, roof, hanging) {
+    const slots = SLOTS[roof.length] || [];
+    let html = roof.map((name, i) => {
+      const b = BILLBOARDS[slots[i]];
+      return `<button class="billboard ${name}" data-open="${name}" style="left:${b.x}px;top:${b.top}px;--c:var(${COLOURS[name] || "--cyan"});${flicker()}">
+        ${face(name)}<i class="spill" style="top:${b.roof - b.top - 4}px"></i></button>`;
+    }).join("");
+    if (hanging) {
+      html += `<button class="billboard hanging ${hanging}" data-open="${hanging}" style="--c:var(${COLOURS[hanging] || "--cyan"});${flicker()}">
+        <i class="chain l"></i><i class="chain r"></i>${face(hanging)}</button>`;
+    }
+    el.innerHTML = html;
+  }
+
+  // names: every billboard; hanging: the one that hangs from the top instead
+  // of standing on a roof (or none).
+  function build(home, names, hanging) {
+    const roof = names.filter((n) => n !== hanging).slice(0, 3);
+    paintCity(home.querySelector(".city"), (SLOTS[roof.length] || []).map((i) => BILLBOARDS[i]));
     addWindows(home.querySelector(".windows"));
     home.querySelector(".rain.near").style.backgroundImage = rainTile(70, 1.6, 0.45);
     home.querySelector(".rain.far").style.backgroundImage = rainTile(120, 1, 0.3);
     home.querySelector(".stars").style.backgroundImage = starTile();
     document.getElementById("static").style.backgroundImage = staticTile();
-    billboards(home.querySelector(".billboards"), names);
+    billboards(home.querySelector(".billboards"), roof, names.includes(hanging) ? hanging : null);
   }
 
   // The scene follows the weather: rain when it rains, stars on a clear night.

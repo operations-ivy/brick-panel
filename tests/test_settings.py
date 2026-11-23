@@ -14,6 +14,7 @@ def test_defaults_have_the_plus_and_portrait():
     s = S.load()
     assert s["plus"] == {"up": "weather", "right": "climate", "down": "lights", "left": "brick"}
     assert s["billboards"] == ["alerts", "calendar", "shopping"]
+    assert s["hanging"] == "alerts"
     assert s["kiosk"]["rotation"] == 270
     assert s["server"]["port"] == 8767
     assert s["weather"]["point"] == ""  # the panel's location is never in git

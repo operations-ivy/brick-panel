@@ -24,6 +24,7 @@ from brick_panel.web import Panel
 from brick_panel.web import serve
 from brick_panel.web import STATIC
 from brick_panel.web import static_file
+from brick_panel.web import surprise_names
 
 
 def make_panel(settings, feeds=None, controls=None, metrics=None, household=None, night=None):
@@ -191,6 +192,7 @@ def test_room_json(server):
         "/api/bench",
         "/api/shopping",
         "/api/wake",
+        "/api/rum",
     ],
 )
 def test_controls_are_for_the_panel_only(server, monkeypatch, path):
@@ -204,3 +206,17 @@ def test_controls_are_for_the_panel_only(server, monkeypatch, path):
 def test_is_loopback():
     assert is_loopback("127.0.0.1") and is_loopback("::1")
     assert not is_loopback("192.168.1.50") and not is_loopback("nonsense")
+
+
+def test_surprise_names():
+    assert surprise_names("alpha, Bravo ,charlie") == ["ALPHA", "BRAVO", "CHARLIE"]
+    assert surprise_names("o'neil-smith,b,c") == ["ONEILSMI", "B", "C"]  # letters only, at most 8
+    assert surprise_names("") == []
+    assert surprise_names("alpha,bravo") == []  # three or none
+
+
+def test_surprise_names_only_for_the_panel_itself(settings):
+    panel = make_panel(settings)
+    panel.names = ["ALPHA", "BRAVO", "CHARLIE"]
+    assert panel.state(local=True)["names"] == ["ALPHA", "BRAVO", "CHARLIE"]
+    assert panel.state()["names"] == []  # a browser on the LAN never sees them

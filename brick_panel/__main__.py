@@ -27,6 +27,7 @@ from .room import Room
 from .weather import Weather
 from .web import Panel
 from .web import serve
+from .web import surprise_names
 
 log = logging.getLogger("brick_panel")
 
@@ -79,7 +80,7 @@ def main(argv: list[str] | None = None) -> None:
     controls = Controls.from_settings(settings, ha, metrics, room, night)
     household = Household(settings, ha, metrics)
     perf = Perf(settings["perf"], metrics)
-    panel = Panel(settings, weather, perf, metrics, feeds, controls, household, night)
+    panel = Panel(settings, weather, perf, metrics, feeds, controls, household, night, surprise_names())
     host = args.host or settings["server"]["host"]
     port = args.port or settings["server"]["port"]
     server = serve(panel, host, port)

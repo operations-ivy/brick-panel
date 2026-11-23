@@ -126,8 +126,11 @@ plus:
   down: lights
   left: brick
 
-# Home's rooftop billboards, left to right; each opens its screen.
+# Home's billboards; each opens its screen. They stand on the rooftops, left
+# to right, except the one named by hanging, which hangs on chains from the
+# top edge (empty: none hangs).
 billboards: [alerts, calendar, shopping]
+hanging: alerts
 
 perf:
   # A frame later than budget x late_factor is late (one missed vsync).

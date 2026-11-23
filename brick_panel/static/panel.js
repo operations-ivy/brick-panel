@@ -27,6 +27,7 @@ let current = "home";
 let busy = false;
 let plus = { up: "weather", right: "climate", down: "lights", left: "brick" };
 let billboards = ["alerts", "calendar", "shopping"];
+let hanging = "alerts";
 
 // ---- Frame timing ----
 
@@ -127,6 +128,7 @@ async function go(name) {
   hints.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, fill: "forwards" });
   leaveControls(from.dataset.screen);
   leaveHousehold(from.dataset.screen);
+  if (name !== "home") Pizazz.stop(); // Home's covered now
   if (name === "home") renderClock(true);
 
   const frames = stop();
@@ -163,6 +165,7 @@ function applyDark() {
   stage.classList.toggle("dark", d);
   nightEl.animate([{ opacity: d ? 0 : 1 }, { opacity: d ? 1 : 0 }], { duration: d ? 900 : 160, fill: "forwards" });
   if (d) {
+    Pizazz.stop();
     leaveControls(current);
     leaveHousehold(current);
     jump("home");
@@ -259,7 +262,10 @@ stage.addEventListener("pointerup", (e) => {
   if (!p || p.swallowed) return;
   const dx = e.clientX - p.x, dy = e.clientY - p.y;
   const moved = Math.hypot(dx, dy);
-  if (moved < 24 && e.timeStamp - p.t < 800) tap(e.target);
+  if (moved < 24 && e.timeStamp - p.t < 800) {
+    tap(e.target);
+    RUM.tap(e.timeStamp);
+  }
   else if (e.timeStamp - p.t < SWIPE_MS) {
     const dir = swipeDir(dx, dy);
     if (dir) swipe(dir);
@@ -347,15 +353,18 @@ let hashDone = false;
 
 async function poll() {
   try {
+    const asked = performance.now();
     const r = await fetch("/api/state", { cache: "no-store" });
     const s = await r.json();
+    RUM.poll(performance.now() - asked);
     if (boot && s.boot !== boot) { location.reload(); return; }
     boot = s.boot;
     state = s;
     plus = s.plus || plus;
-    if (JSON.stringify(s.billboards) !== JSON.stringify(billboards)) {
+    if (JSON.stringify(s.billboards) !== JSON.stringify(billboards) || s.hanging !== hanging) {
       billboards = s.billboards;
-      Scene.build(home, billboards);
+      hanging = s.hanging;
+      Scene.build(home, billboards, hanging);
     }
     if (s.night && s.night.is_night) {
       awakeUntil = Math.max(awakeUntil, performance.now() + s.night.awake_for * 1000);
@@ -364,6 +373,7 @@ async function poll() {
     setText(home.querySelector(".link-text"), "LINK");
     applyDark();
     if (!busy && !dark) render();
+    if (!busy) Pizazz.prepare();
     if (!hashDone) { hashDone = true; if (location.hash.length > 1) jump(location.hash.slice(1)); }
     if (s.bench && s.bench.id !== benchSeen) { benchSeen = s.bench.id; bench(s.bench); }
   } catch (e) {
@@ -374,8 +384,9 @@ async function poll() {
 
 // ---- Bench ----
 
-// Round the plus and through every billboard, `rounds` times, timing every
-// frame; deploy/bench asked for it and reads the verdict.
+// Round the plus and through every billboard, `rounds` times, then Home's
+// three surprises, timing every frame; deploy/bench asked for it and reads
+// the verdict.
 async function bench(run) {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const tour = [];
@@ -389,6 +400,15 @@ async function bench(run) {
       const f = await go(name);
       if (f) frames.push(...f);
     }
+  }
+  // Then Home's surprises, each timed while it plays (when there are names).
+  if (current !== "home") await go("home");
+  for (let i = 0; i < 3; i++) {
+    await wait(300);
+    const stop = recordFrames();
+    if (Pizazz.play(i)) await Pizazz.wait();
+    const f = stop();
+    if (f.length > 2) frames.push(...f.slice(1));
   }
   post(`/api/bench/${run.id}`, { frames });
 }
@@ -405,11 +425,13 @@ function jump(name) {
 
 // ---- Start ----
 
-Scene.build(home, billboards);
+Scene.build(home, billboards, hanging);
 drawHints();
 renderClock(true);
 setInterval(() => renderClock(false), 1000);
 glitchSoon();
+Pizazz.start(home);
+RUM.start();
 poll();
 setInterval(poll, POLL_MS);
 setInterval(applyDark, 1000);
