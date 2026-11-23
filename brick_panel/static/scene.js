@@ -163,23 +163,38 @@ const Scene = (() => {
     return `url(${c.toDataURL("image/png")})`;
   }
 
-  function rainTile(count, width, alpha) {
+  // The Presto's rain: single green glyphs falling, each dragging the glyph
+  // it was a moment ago one line behind it, darker (presto's fx.GlyphDrops),
+  // from the Presto's own glyph set. Painted once into a tile that wraps top
+  // to bottom; the compositor slides it down.
+  const GLYPHS = "0123456789ABCDEF<>=+*:;#%$&@";
+  function glyphTile(count, size, head, trail) {
     return tile(480, 400, (g, r) => {
-      g.strokeStyle = `rgba(160,225,255,${alpha})`;
-      g.lineWidth = width;
+      g.font = `${size}px VT323, monospace`;
+      g.textBaseline = "top";
+      const line = Math.round(size * 0.85);
       for (let i = 0; i < count; i++) {
-        const x = r() * 480, y = r() * 400, len = 10 + r() * 16;
-        g.beginPath();
-        g.moveTo(x, y);
-        g.lineTo(x - len * 0.1, y + len);
-        g.stroke();
-        // Wrap the streak across the tile's bottom edge so the loop is seamless.
-        if (y + len > 400) {
-          g.beginPath();
-          g.moveTo(x, y - 400);
-          g.lineTo(x - len * 0.1, y - 400 + len);
-          g.stroke();
+        const x = Math.floor(r() * 470), y = Math.floor(r() * 400);
+        const a = GLYPHS[Math.floor(r() * GLYPHS.length)], b = GLYPHS[Math.floor(r() * GLYPHS.length)];
+        for (const dy of [0, -400, 400]) { // wrapped, so the loop is seamless
+          g.fillStyle = trail;
+          g.fillText(b, x, y - line + dy);
+          g.fillStyle = head;
+          g.fillText(a, x, y + dy);
         }
+      }
+    });
+  }
+
+  // Snow: pale flakes, a few bigger than the rest, wrapped like the rain.
+  function snowTile(count, big) {
+    return tile(480, 400, (g, r) => {
+      for (let i = 0; i < count; i++) {
+        const x = Math.floor(r() * 478), y = Math.floor(r() * 400);
+        const s = r() < 0.25 ? big : big - 1;
+        g.fillStyle = r() < 0.2 ? "#bdefff" : "#e8f6ff";
+        g.globalAlpha = 0.55 + r() * 0.45;
+        for (const dy of [0, -400, 400]) g.fillRect(x, y + dy, s, s);
       }
     });
   }
@@ -237,22 +252,63 @@ const Scene = (() => {
     const roof = names.filter((n) => n !== hanging).slice(0, 3);
     paintCity(home.querySelector(".city"), (SLOTS[roof.length] || []).map((i) => BILLBOARDS[i]));
     addWindows(home.querySelector(".windows"));
-    home.querySelector(".rain.near").style.backgroundImage = rainTile(70, 1.6, 0.45);
-    home.querySelector(".rain.far").style.backgroundImage = rainTile(120, 1, 0.3);
+    // The glyphs need the VT323 font loaded before they're painted.
+    document.fonts.load("16px VT323").catch(() => {}).then(() => {
+      home.querySelector(".rain.near").style.backgroundImage = glyphTile(34, 17, "#39ff6a", "#14783f");
+      home.querySelector(".rain.far").style.backgroundImage = glyphTile(60, 12, "#0f8f3c", "#04301a");
+    });
+    home.querySelector(".snow.near").style.backgroundImage = snowTile(60, 4);
+    home.querySelector(".snow.far").style.backgroundImage = snowTile(110, 3);
+    lightning(home);
     home.querySelector(".stars").style.backgroundImage = starTile();
     document.getElementById("static").style.backgroundImage = staticTile();
     billboards(home.querySelector(".billboards"), roof, names.includes(hanging) ? hanging : null);
   }
 
   // The scene follows the weather: rain when it rains, stars on a clear night.
+  // The weather on Home. Glyph rain as on the Presto (presto's wx.RAIN):
+  // heavy in rain, heavier and faster in a thunderstorm (with lightning),
+  // light in fog and cloud, none when it's clear or partly cloudy. Snow
+  // drifts down when it snows; rain and snow together show both.
   function weather(home, condition, night) {
     const c = (condition || "").toUpperCase();
-    const raining = /RAIN|DRIZZLE|SHOWER|THUNDER|STORM/.test(c);
+    const snowing = /SNOW|FLURR|SLEET|BLIZZARD|WINTRY|ICE PELLETS/.test(c);
+    const storming = /THUNDER|T-STORM|TSTORM/.test(c);
+    const raining = storming || (/RAIN|DRIZZLE|SHOWER/.test(c) && !/SNOW SHOWER/.test(c));
     const clear = /CLEAR|SUNNY|FAIR/.test(c) || c === "";
+    const grey = !raining && !snowing && !/PARTLY/.test(c) && /FOG|MIST|HAZE|SMOKE|CLOUD|OVERCAST/.test(c);
     home.classList.toggle("raining", raining);
+    home.classList.toggle("storming", storming);
+    home.classList.toggle("snowing", snowing);
+    home.classList.toggle("misting", grey);
+    storm.on = storming;
     home.classList.toggle("clear", clear && !raining);
     home.classList.toggle("night", night);
   }
 
-  return { build, weather, COLOURS };
+  // Lightning, while there's a thunderstorm: every 6-16 s on Home, awake and
+  // still, the sky flashes and a bolt cracks somewhere over the skyline.
+  const storm = { on: false, timer: null };
+  function lightning(home) {
+    clearTimeout(storm.timer);
+    storm.timer = setTimeout(() => {
+      const awake = typeof dark === "undefined" || !dark;
+      const still = typeof busy === "undefined" || (!busy && current === "home");
+      if (storm.on && awake && still) flash(home);
+      lightning(home);
+    }, 6000 + Math.random() * 10000);
+  }
+
+  function flash(home) {
+    const bolt = home.querySelector(".bolt");
+    bolt.style.left = `${40 + Math.floor(Math.random() * 380)}px`;
+    bolt.style.transform = `scale(${Math.random() < 0.5 ? -1 : 1}, 1)`;
+    const flicker = [{ opacity: 0 }, { opacity: 1, offset: 0.08 }, { opacity: 0.15, offset: 0.2 },
+      { opacity: 0.9, offset: 0.3 }, { opacity: 0, offset: 0.55 }, { opacity: 0.5, offset: 0.62 }, { opacity: 0 }];
+    bolt.animate(flicker, { duration: 700, easing: "steps(12)" });
+    home.querySelector(".flash").animate(flicker.map((k) => ({ ...k, opacity: k.opacity * 0.55 })),
+      { duration: 700, easing: "steps(12)" });
+  }
+
+  return { build, weather, flash, COLOURS };
 })();

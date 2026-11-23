@@ -199,14 +199,39 @@ body {
 .billboard.lit .val { color: var(--c); animation: pulse 1.4s ease-in-out infinite; }
 .billboard.pressed { transform: scale(.96); }
 
-/* Rain: tall tiles sliding down forever, on the compositor. */
-.rain { position: absolute; left: 0; top: -400px; width: 560px; height: 1200px; pointer-events: none;
-  opacity: 0; background-repeat: repeat; z-index: 6; }
-.rain.near { animation: fall .55s linear infinite; }
-.rain.far { animation: fall 1.1s linear infinite; }
+/* Rain, the Presto's: green glyphs falling (scene.js paints the tiles once),
+   tall layers sliding straight down forever, on the compositor. */
+.rain { position: absolute; left: 0; top: -400px; width: 480px; height: 1200px; pointer-events: none;
+  opacity: 0; background-repeat: repeat; z-index: 2; will-change: transform; }
+/* Behind the clock, the text, the billboards and the sign; over the skyline. */
+.rain.near { animation: fall 2.4s linear infinite; }
+.rain.far { animation: fall 4.2s linear infinite; }
 .raining .rain { opacity: 1; }
-.raining .rain.far { opacity: .55; }
-@keyframes fall { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-40px, 400px, 0); } }
+.raining .rain.far { opacity: .8; }
+.misting .rain.far { opacity: .7; }
+.storming .rain.near { animation-duration: 1.3s; }
+.storming .rain.far { animation-duration: 2.4s; opacity: 1; }
+
+/* Snow: pale flakes drifting down and a little sideways, slower than rain. */
+.snow { position: absolute; left: -20px; top: -400px; width: 520px; height: 1200px; pointer-events: none;
+  opacity: 0; background-repeat: repeat; z-index: 2; will-change: transform; }
+.snow.near { animation: drift 9s linear infinite; }
+.snow.far { animation: drift 16s linear infinite; }
+.snowing .snow { opacity: .9; }
+.snowing .snow.far { opacity: .6; }
+@keyframes drift {
+  0% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(12px, 100px, 0); }
+  50% { transform: translate3d(0, 200px, 0); } 75% { transform: translate3d(-12px, 300px, 0); }
+  100% { transform: translate3d(0, 400px, 0); }
+}
+
+/* Lightning (scene.js): the sky flashes, a bolt cracks over the skyline. */
+.flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 1; will-change: opacity;
+  background: linear-gradient(to bottom, #d9ccff 0%, #9d4edd66 45%, #0000 70%); }
+.bolt { position: absolute; top: 330px; left: 200px; pointer-events: none; opacity: 0; z-index: 1;
+  will-change: opacity; overflow: visible; }
+.bolt polyline { fill: #f4efff; stroke: #c9b8ff; stroke-width: 1.5; filter: drop-shadow(0 0 6px #b39dff); }
+@keyframes fall { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(0, 400px, 0); } }
 
 /* ---- App screens ---- */
 
