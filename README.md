@@ -24,9 +24,10 @@ and it holds the panel's own sensor, PIN and Home Assistant token.
 
 Home is a rainy neon city at night: a neon-tube clock that glitches every
 20-30 s, the date, the forecast, and a skyline whose weather follows the real
-one (rain when it rains, stars on a clear night). Three rooftop billboards
-open **ALERTS**, **CALENDAR** and **SHOPPING**. Arms and billboards are
-settings (`plus`, `billboards`).
+one (rain when it rains, stars on a clear night). Billboards on the rooftops
+open **CALENDAR** and **SHOPPING**, and **ALERTS** hangs on chains from the
+top edge. Arms and billboards are settings (`plus`, `billboards`,
+`hanging`).
 
 | Touch | Does |
 | --- | --- |
@@ -70,6 +71,25 @@ The screens:
   list, from the Pi itself.
 
 Titles, places and notes never go to the log or the metrics.
+
+## Home's surprises
+
+Every few minutes, one of three: a plane crosses the sky towing a banner,
+the city's windows drift together into letters and apart again, or the
+tower's BRICK sign shorts out and comes back as a word for a few seconds.
+Each spells a name from `BRICK_PANEL_NAMES` (three, comma separated, e.g.
+`BRICK_PANEL_NAMES=ALPHA,BRAVO,CHARLIE`). They're people's names, so they live
+only in the panel's env file (`~/.config/brick-panel/env`), never in git, and
+the server gives them only to the panel's own page, never to a browser on
+the LAN. Not set (or not three): no surprises. `deploy/bench` times them too.
+
+## Real user monitoring
+
+The page reports how it's doing every 30 s (`static/rum.js`, `rum.py`), as
+`panel_rum_*` metrics: each tap's time to the next frame (fast under 100 ms,
+ok under 200 ms, slow), long tasks, a few seconds of frames sampled each
+minute on the screen that's up, errors (also logged, so in Loki), memory,
+uptime, and how long the state polls take.
 
 ## Night
 

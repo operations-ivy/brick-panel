@@ -151,7 +151,7 @@ class Panel:
         f = self.feeds.get(name)
         return f.fresh() if f is not None else None
 
-    def state(self, local: bool = False) -> dict:
+    def state(self, *, local: bool = False) -> dict:
         """What the page shows. The surprise names go only to the panel's own
         page (local), never to a browser on the LAN."""
         s, now = self.settings, time.time()
@@ -186,7 +186,7 @@ def handler(panel: Panel):
                 local = is_loopback(self.client_address[0])
                 if local:
                     panel.metrics.set("panel_page_seen_timestamp_seconds", time.time())
-                return self.send_json(panel.state(local))
+                return self.send_json(panel.state(local=local))
             if path == "/api/bench":
                 return self.send_json(asdict(panel.perf.last_bench) if panel.perf.last_bench else {})
             if path == "/room.json":

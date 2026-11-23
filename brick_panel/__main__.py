@@ -80,7 +80,7 @@ def main(argv: list[str] | None = None) -> None:
     controls = Controls.from_settings(settings, ha, metrics, room, night)
     household = Household(settings, ha, metrics)
     perf = Perf(settings["perf"], metrics)
-    panel = Panel(settings, weather, perf, metrics, feeds, controls, household, night, surprise_names())
+    panel = Panel(settings, weather, perf, metrics, feeds, controls, household, night, names=surprise_names())
     host = args.host or settings["server"]["host"]
     port = args.port or settings["server"]["port"]
     server = serve(panel, host, port)

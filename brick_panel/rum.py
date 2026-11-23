@@ -19,6 +19,7 @@ MAX_ERRORS_LOGGED = 5  # per report, so a loop of errors can't flood the log
 
 
 def _numbers(value: object, limit: int = 2000) -> list[float]:
+    """The numbers in a list from the page (perf.clean() drops the rest)."""
     return clean(value[:limit]) if isinstance(value, list) else []
 
 
@@ -34,7 +35,7 @@ def tap_speed(ms: float) -> str:
     return "ok" if ms < OK_TAP_MS else "slow"
 
 
-def record(metrics: Metrics, body: dict, late_after_ms: float, screens: list[str]) -> None:
+def record(metrics: Metrics, body: dict[str, object], late_after_ms: float, screens: list[str]) -> None:
     """One report from the page."""
     taps = _numbers(body.get("taps"))
     for ms in taps:
@@ -65,7 +66,9 @@ def record(metrics: Metrics, body: dict, late_after_ms: float, screens: list[str
         metrics.inc("panel_rum_errors_total", len(errors))
         for e in errors[:MAX_ERRORS_LOGGED]:
             if isinstance(e, dict):
-                log.warning("page error: %s (%s:%s)", str(e.get("message"))[:300], str(e.get("source"))[-60:], e.get("line"))
+                log.warning(
+                    "page error: %s (%s:%s)", str(e.get("message"))[:300], str(e.get("source"))[-60:], e.get("line")
+                )
 
     for key, name in (("heap_bytes", "panel_rum_heap_bytes"), ("uptime_s", "panel_rum_page_uptime_seconds")):
         if (value := _number(body.get(key))) is not None:

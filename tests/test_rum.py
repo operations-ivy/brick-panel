@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from brick_panel import rum
 from brick_panel.metrics import Metrics
 
@@ -26,7 +28,8 @@ def test_a_report_becomes_metrics():
     assert m.get("panel_rum_long_task_seconds_total") == 0.2
     assert m.get("panel_rum_idle_frames_total", screen="home", result="on_time") == 3
     assert m.get("panel_rum_idle_frames_total", screen="home", result="late") == 1
-    assert m.get("panel_rum_polls_total") == 2 and m.get("panel_rum_poll_seconds_total") == 0.05
+    assert m.get("panel_rum_polls_total") == 2
+    assert m.get("panel_rum_poll_seconds_total") == 0.05
     assert m.get("panel_rum_heap_bytes") == 12_000_000
     assert m.get("panel_rum_page_uptime_seconds") == 600
     assert m.get("panel_rum_page_loads_total") == 1
@@ -34,10 +37,15 @@ def test_a_report_becomes_metrics():
 
 def test_junk_is_ignored():
     m = Metrics()
-    rum.record(m, {"taps": "x", "idle": {"screen": "nowhere", "frames": [16]}, "heap_bytes": True, "uptime_s": -1},
-               late_after_ms=25, screens=SCREENS)
+    rum.record(
+        m,
+        {"taps": "x", "idle": {"screen": "nowhere", "frames": [16]}, "heap_bytes": True, "uptime_s": -1},
+        late_after_ms=25,
+        screens=SCREENS,
+    )
     assert m.get("panel_rum_idle_frames_total", screen="nowhere", result="on_time") == 0
-    assert m.get("panel_rum_heap_bytes") == 0 and m.get("panel_rum_page_loads_total") == 0
+    assert m.get("panel_rum_heap_bytes") == 0
+    assert m.get("panel_rum_page_loads_total") == 0
 
 
 def test_errors_are_counted_and_logged_a_few_at_a_time(caplog):
@@ -48,3 +56,8 @@ def test_errors_are_counted_and_logged_a_few_at_a_time(caplog):
     assert m.get("panel_rum_errors_total") == 8
     assert len(caplog.records) == rum.MAX_ERRORS_LOGGED
     assert "boom 0" in caplog.records[0].getMessage()
+
+
+@pytest.mark.parametrize(("ms", "speed"), [(0, "fast"), (99.9, "fast"), (100, "ok"), (199.9, "ok"), (200, "slow")])
+def test_tap_speed(ms, speed):
+    assert rum.tap_speed(ms) == speed
