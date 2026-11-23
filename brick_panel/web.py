@@ -201,6 +201,8 @@ def handler(panel: Panel):
             if path == "/api/bench":
                 return self.send_json({"id": panel.perf.request_bench()})
             if path == "/api/wake":
+                # Without night there's nothing to wake: an answer, not an
+                # error, as the page asks on every tap at night.
                 if panel.night is None:
                     return self.send_json({"woke": False})
                 return self.send_json({"woke": panel.night.tap(), **panel.night.view()})

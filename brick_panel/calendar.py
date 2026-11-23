@@ -9,6 +9,7 @@ from __future__ import annotations
 import calendar as pycal
 import hashlib
 import html
+import math
 import re
 from datetime import date
 from datetime import datetime
@@ -48,7 +49,7 @@ def parse(raw: dict, calendar: str, tz: tzinfo) -> dict | None:
     summary = (raw.get("summary") or "").strip() or "BUSY"
     key = f"{calendar}|{raw.get('uid') or ''}|{start.isoformat()}|{summary}"
     return {
-        "id": hashlib.sha1(key.encode()).hexdigest()[:12],
+        "id": hashlib.sha1(key.encode(), usedforsecurity=False).hexdigest()[:12],
         "summary": summary,
         "start": start,
         "end": max(end, start),
@@ -96,11 +97,14 @@ def on_day(events: list[dict], day: date, now: datetime, hours: int = 12) -> lis
     over."""
     begin = datetime.combine(day, time(), now.tzinfo)
     finish = begin + timedelta(days=1)
+
+    def spans_day(e: dict) -> bool:
+        return e["all_day"] or (e["start"] < begin and e["end"] >= finish)
+
+    hits = [e for e in events if e["start"] < finish and e["end"] > begin]
     entries = []
-    for e in events:
-        if not (e["start"] < finish and e["end"] > begin):
-            continue
-        all_day = e["all_day"] or (e["start"] < begin and e["end"] >= finish)
+    for e in sorted(hits, key=lambda e: (not spans_day(e), e["start"], e["summary"])):
+        all_day = spans_day(e)
         if all_day:
             when = "ALL DAY"
         elif e["start"] < begin:
@@ -115,14 +119,10 @@ def on_day(events: list[dict], day: date, now: datetime, hours: int = 12) -> lis
                 "when": when,
                 "all_day": all_day,
                 "past": e["end"] <= now,
-                "soon": int(minutes + 0.999) if not all_day and 0 < minutes <= SOON_MINUTES else None,
+                "soon": math.ceil(minutes) if not all_day and 0 < minutes <= SOON_MINUTES else None,
                 "now": not all_day and e["start"] <= now < e["end"],
-                "_start": e["start"],
             }
         )
-    entries.sort(key=lambda x: (not x["all_day"], x["_start"], x["summary"]))
-    for entry in entries:
-        del entry["_start"]
     return entries
 
 
@@ -182,9 +182,13 @@ def view(events: list[dict] | None, now: datetime, months: int, hours: int = 12)
                     tone = "now"
                 elif entries and all(x["past"] for x in entries):
                     tone = "past"
-                row.append({"date": key, "day": day.day, "ours": day.month == month, "count": len(entries), "tone": tone})
+                row.append(
+                    {"date": key, "day": day.day, "ours": day.month == month, "count": len(entries), "tone": tone}
+                )
             weeks.append(row)
-        out_months.append({"key": f"{year}-{month:02d}", "name": f"{pycal.month_name[month]} {year}".upper(), "weeks": weeks})
+        out_months.append(
+            {"key": f"{year}-{month:02d}", "name": f"{pycal.month_name[month]} {year}".upper(), "weeks": weeks}
+        )
     shown = {x["id"] for entries in days.values() for x in entries}
     upcoming = [x for x in days.get(today.isoformat(), []) if not x["past"]]
     return {

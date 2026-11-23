@@ -72,16 +72,9 @@ def main(argv: list[str] | None = None) -> None:
         sources.append(room)
     for source in sources:
         source.start()
-    n = settings["night"]
-    night = Night(
-        n["window"],
-        n["level"],
-        n["day_level"],
-        n["wake_seconds"],
-        None if args.demo else Backlight(),
-        metrics,
-        sun=lambda: sun_times(ha.attrs(n["sun_entity"])),
-    )
+    sun_entity = settings["night"]["sun_entity"]
+    backlight = None if args.demo else Backlight()
+    night = Night.from_settings(settings, backlight, metrics, sun=lambda: sun_times(ha.attrs(sun_entity)))
     night.start()
     controls = Controls.from_settings(settings, ha, metrics, room, night)
     household = Household(settings, ha, metrics)

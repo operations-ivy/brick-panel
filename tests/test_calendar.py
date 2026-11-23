@@ -12,8 +12,12 @@ NOW = datetime(2026, 11, 22, 14, 0, tzinfo=TZ)
 
 
 def timed(summary, start, minutes=60, **more):
-    return {"summary": summary, "start": {"dateTime": start.isoformat()},
-            "end": {"dateTime": (start + timedelta(minutes=minutes)).isoformat()}, **more}
+    return {
+        "summary": summary,
+        "start": {"dateTime": start.isoformat()},
+        "end": {"dateTime": (start + timedelta(minutes=minutes)).isoformat()},
+        **more,
+    }
 
 
 def events(*raw):

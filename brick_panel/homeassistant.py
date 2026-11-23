@@ -220,7 +220,7 @@ class HomeAssistant(threading.Thread):
         events = []
         for entity in self.calendars:
             try:
-                raw = self._request("GET", f"/api/calendars/{entity}?{urllib.parse.urlencode(span)}")
+                events += self._fetch_calendar(entity, span, now)
                 self._count("calendar", "ok")
             except Exception as e:  # noqa: BLE001 - the calendars keep their last events
                 self._count("calendar", "error")
@@ -228,12 +228,16 @@ class HomeAssistant(threading.Thread):
                 if self.metrics:
                     self.metrics.set("panel_calendar_up", 0)
                 return
-            events += [e for e in (cal.parse(r, entity, now.tzinfo) for r in raw or []) if e]
         with self._lock:
             self._events = events
         self.events_updated = self.clock()
         if self.metrics:
             self.metrics.set("panel_calendar_up", 1)
+
+    def _fetch_calendar(self, entity: str, span: dict, now: datetime) -> list[dict]:
+        """One calendar's events in the span (raises when it doesn't answer)."""
+        raw = self._request("GET", f"/api/calendars/{entity}?{urllib.parse.urlencode(span)}")
+        return [ev for r in raw or [] if (ev := cal.parse(r, entity, now.tzinfo))]
 
     def _call(self, domain: str, service: str, data: dict) -> None:
         try:

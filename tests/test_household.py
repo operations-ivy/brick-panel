@@ -34,8 +34,11 @@ def test_tick_and_untick(setup):
 
 @pytest.mark.parametrize(
     ("uid", "done", "why"),
-    [("item-0", "yes", "done must be true or false"), ("nope", True, "not an item on the list"),
-     (7, True, "not an item on the list")],
+    [
+        ("item-0", "yes", "done must be true or false"),
+        ("nope", True, "not an item on the list"),
+        (7, True, "not an item on the list"),
+    ],
 )
 def test_tick_refuses(setup, uid, done, why):
     h, _, _ = setup

@@ -8,6 +8,7 @@ panel/night.py."""
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
@@ -15,6 +16,10 @@ from collections.abc import Callable
 from datetime import datetime
 from datetime import time as dtime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .metrics import Metrics
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +29,7 @@ Window = tuple[dtime | str, dtime | str]
 
 
 def parse_window(text: str | None) -> Window | None:
-    """"HH:MM-HH:MM" (may wrap past midnight; either end may be "sunset" or
+    """ "HH:MM-HH:MM" (may wrap past midnight; either end may be "sunset" or
     "sunrise"), or empty for never."""
     text = (text or "").strip()
     if not text:
@@ -41,10 +46,9 @@ def sun_times(attrs: dict) -> dict[str, dtime]:
     either is missing when Home Assistant hasn't said."""
     out = {}
     for name, attr in SUN_EVENTS.items():
-        try:
+        # Missing or unreadable: left out, so in_window() uses FALLBACK.
+        with contextlib.suppress(KeyError, TypeError, ValueError):
             out[name] = datetime.fromisoformat(attrs[attr]).astimezone().time().replace(second=0, microsecond=0)
-        except (KeyError, TypeError, ValueError):
-            pass
     return out
 
 
@@ -86,18 +90,24 @@ class Night:
         day_level: float,
         wake_seconds: float,
         backlight: Backlight | None = None,
-        metrics=None,
+        metrics: Metrics | None = None,
         now: Callable[[], datetime] = datetime.now,
         clock: Callable[[], float] = time.monotonic,
-        sun: Callable[[], dict[str, dtime]] = dict,
+        sun: Callable[[], dict[str, dtime]] | None = None,
     ) -> None:
         self.window = parse_window(window)
         self.night_level, self.day_level = night_level, day_level
         self.wake_seconds = wake_seconds
         self.backlight, self.metrics = backlight, metrics
-        self.now, self.clock, self.sun = now, clock, sun
+        self.now, self.clock = now, clock
+        self.sun = sun or (lambda: {})  # () -> sun_times(...): Home Assistant's sunset and sunrise
         self._awake_until = 0.0
         self._stopping = threading.Event()
+
+    @classmethod
+    def from_settings(cls, settings: dict, backlight: Backlight | None, metrics: Metrics, sun) -> Night:
+        n = settings["night"]
+        return cls(n["window"], n["level"], n["day_level"], n["wake_seconds"], backlight, metrics, sun=sun)
 
     @property
     def is_night(self) -> bool:
@@ -126,8 +136,12 @@ class Night:
     def view(self) -> dict:
         is_night = self.is_night
         awake = max(0.0, self._awake_until - self.clock()) if is_night else 0.0
-        return {"is_night": is_night, "dark": is_night and awake == 0, "awake_for": round(awake, 1),
-                "wake_seconds": self.wake_seconds}
+        return {
+            "is_night": is_night,
+            "dark": is_night and awake == 0,
+            "awake_for": round(awake, 1),
+            "wake_seconds": self.wake_seconds,
+        }
 
     def apply(self) -> None:
         level = self.level

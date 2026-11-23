@@ -13,7 +13,7 @@ from datetime import datetime
 from . import calendar as cal
 from .metrics import Metrics
 
-STATUSES = ("needs_action", "completed")
+NEEDED, DONE = "needs_action", "completed"  # Home Assistant's to-do statuses
 
 
 @dataclass
@@ -49,7 +49,7 @@ class Household:
             message = "SHOPPING LIST UNAVAILABLE" if self.ha.error else "CONNECTING TO THE LIST"
             return {"available": False, "message": message, "items": []}
         rows = [
-            {"uid": i["uid"], "summary": (i.get("summary") or "").strip() or "?", "done": i.get("status") == "completed"}
+            {"uid": i["uid"], "summary": (i.get("summary") or "").strip() or "?", "done": i.get("status") == DONE}
             for i in items
         ]
         rows.sort(key=lambda r: r["done"])  # needed first; stable, so the list's own order within each
@@ -62,7 +62,8 @@ class Household:
         }
 
     def tick(self, uid: object, done: object) -> tuple[bool, str]:
-        """Tick an item off (done) or back on; (ok, why not)."""
+        """Tick an item off (done) or back on; (ok, why not). The arguments
+        come straight from the page's JSON, hence object: checked here."""
         if not self.shopping_list:
             return False, "no shopping list"
         if not isinstance(done, bool):
@@ -70,7 +71,7 @@ class Household:
         items = self.ha.items() or []
         if not isinstance(uid, str) or not any(i.get("uid") == uid for i in items):
             return False, "not an item on the list"
-        status = STATUSES[done]
+        status = DONE if done else NEEDED
         self.ha.call("todo", "update_item", entity_id=self.shopping_list, item=uid, status=status)
         self.ha.set_item_status(uid, status)
         self.metrics.inc("panel_commands_total", action="shopping_item")

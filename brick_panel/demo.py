@@ -151,14 +151,17 @@ def demo_events(now: datetime) -> list[dict]:
     soon, one running, one over, an all-day, a trip over three days."""
     day = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    def at(days: int, hour: float, minutes: float, summary: str, **more: str) -> dict:
-        start = day + timedelta(days=days, hours=hour)
+    def timed(start: datetime, minutes: int, summary: str, **more: str) -> dict:
+        end = start + timedelta(minutes=minutes)
         return {
             "summary": summary,
             "start": {"dateTime": start.isoformat()},
-            "end": {"dateTime": (start + timedelta(minutes=minutes)).isoformat()},
+            "end": {"dateTime": end.isoformat()},
             **more,
         }
+
+    def at(days: int, hour: float, minutes: int, summary: str, **more: str) -> dict:
+        return timed(day + timedelta(days=days, hours=hour), minutes, summary, **more)
 
     def all_day(days: int, length: int, summary: str) -> dict:
         start = (day + timedelta(days=days)).date()
@@ -172,13 +175,13 @@ def demo_events(now: datetime) -> list[dict]:
     raw = [
         all_day(0, 1, "Recycling out"),
         at(0, 7.5, 30, "Coffee with the neighbours"),
-        {
-            "summary": "Dentist",
-            "start": {"dateTime": soon.isoformat()},
-            "end": {"dateTime": (soon + timedelta(minutes=45)).isoformat()},
-            "location": "Suite 200, the clinic on the corner",
-            "description": "<p>Bring the insurance card.</p><p>Cleaning and X-rays.</p>",
-        },
+        timed(
+            soon,
+            45,
+            "Dentist",
+            location="Suite 200, the clinic on the corner",
+            description="<p>Bring the insurance card.</p><p>Cleaning and X-rays.</p>",
+        ),
         at(0, 19, 120, "Movie night"),
         at(1, 9, 60, "Plumber visit", description="Kitchen sink, back left."),
         at(1, 18.5, 90, "Climbing gym"),
@@ -296,10 +299,10 @@ class DemoHomeAssistant:
             return default
 
     def call(self, domain: str, service: str, **data: object) -> None:
-        entity = data.pop("entity_id")
         if domain == "todo":
             self.set_item_status(data["item"], data["status"])
             return
+        entity = data.pop("entity_id")
         s = self.states[entity]
         attrs = s["attributes"]
         if service == "set_temperature":
