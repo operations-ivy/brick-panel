@@ -12,7 +12,8 @@ port=$(setting server.port)
 url="http://127.0.0.1:$port/"
 
 # Wayland's transform: 90 for a panel turned 90 degrees clockwise. Touch
-# follows the output, so taps land where they're drawn.
+# doesn't follow it in cage: deploy/touch-rotation turns it to match, before
+# cage starts (brick-panel-kiosk.service).
 wlr-randr --output "$output" --transform "$rotation" || echo "kiosk: couldn't turn $output to $rotation" >&2
 
 # The server starts beside this; give it 30 s.

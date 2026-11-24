@@ -1,0 +1,35 @@
+#!/bin/sh
+# Turns the touchscreen with the picture. brick-panel-kiosk.service runs this
+# before cage starts. cage turns the output (deploy/kiosk's wlr-randr) but
+# passes touches through in the panel's native landscape frame. So a
+# left-to-right swipe on the portrait panel reached the page as a downward
+# one (2026-11-23). libinput turns them instead, with a calibration matrix
+# from udev, which it reads when cage opens the touchscreen.
+#
+# The matrix for each kiosk.rotation, for the original 7" panel (native
+# landscape, touch aligned with the picture at 0). 270 was measured on
+# brick1982; the others follow from it.
+set -eu
+repo=$(cd "$(dirname "$0")/.." && pwd)
+rotation=$(PYTHONPATH="$repo" python3 -m brick_panel.settings kiosk.rotation)
+case $rotation in
+    0 | normal) matrix="1 0 0 0 1 0" ;;
+    90) matrix="0 -1 1 1 0 0" ;;
+    180) matrix="-1 0 1 0 -1 1" ;;
+    270) matrix="0 1 0 -1 0 1" ;;
+    *)
+        echo "touch-rotation: no matrix for rotation $rotation; touch left as it is" >&2
+        exit 0
+        ;;
+esac
+
+rules=/etc/udev/rules.d/91-brick-panel-touch.rules
+rule="ENV{ID_INPUT_TOUCHSCREEN}==\"1\", ENV{LIBINPUT_CALIBRATION_MATRIX}=\"$matrix\""
+header="# Written by brick-panel's deploy/touch-rotation for kiosk.rotation $rotation."
+if [ "$(cat "$rules" 2>/dev/null)" != "$(printf '%s\n%s' "$header" "$rule")" ]; then
+    printf '%s\n%s\n' "$header" "$rule" | sudo tee "$rules" >/dev/null
+    sudo udevadm control --reload
+fi
+# Every start, so the property is in place even after a reboot races udev.
+sudo udevadm trigger --subsystem-match=input --action=change
+sudo udevadm settle --timeout=10

@@ -216,8 +216,11 @@ panel-select neon                   # or: panel-select lcars
 - `brick-panel.service` is the server, on :8767, the port LCARS used, so
   Prometheus' job keeps its target.
 - `brick-panel-kiosk.service` runs cage on tty1 and `deploy/kiosk`. That
-  script turns the output with `wlr-randr --transform` (touch follows) and
-  starts Chromium with GPU raster.
+  script turns the output with `wlr-randr --transform` and starts Chromium
+  with GPU raster. cage doesn't turn the touchscreen with the output, so
+  before it starts, `deploy/touch-rotation` writes a udev rule giving
+  libinput the calibration matrix for `kiosk.rotation`
+  (`/etc/udev/rules.d/91-brick-panel-touch.rules`).
 - `panel-select` switches between the neon panel and LCARS. Only one runs at
   a time, and only that panel's deploy timer is on.
 - `brick-panel-deploy.timer` (a user unit, every 2 hours) follows
