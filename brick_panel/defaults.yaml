@@ -102,14 +102,12 @@ sound:
   # The panel's sounds, made by the page (static/sound.js). These are the
   # defaults; what's ticked in SETTINGS (a tap on the STRAYLIGHT logo) is
   # saved in file and wins. level: low or medium (both under brick1982's
-  # ALSA cap). quiet_hours: the night's format ("22:00-07:00", sunset/sunrise
-  # ends; empty: never quiet). In quiet hours nothing plays unless
-  # quiet_sound is on; alerts play then only if quiet_alerts is on.
+  # ALSA cap). quiet_hours: muted then (the night's format; empty: never).
+  # The mute button, on every screen, flips that until the next change:
+  # unmuted in quiet hours until they end, muted by day until they start.
   file: ~/.config/brick-panel/sound.yaml
   level: medium
-  quiet_hours: "22:00-07:00"
-  quiet_sound: false
-  quiet_alerts: false
+  quiet_hours: "18:00-08:00"
   events:
     tap: true
     screen: true
@@ -122,14 +120,17 @@ sound:
     surprise_sign: true
 
 night:
-  # Dark overnight: "HH:MM-HH:MM" (may wrap past midnight), and either end
-  # may be sunset or sunrise (Home Assistant's sun.sun). Empty: never dark.
-  # A tap wakes the screen for wake_seconds, dimmed to level (0-1); that
-  # first tap presses nothing. Going dark locks the controls.
-  window: "21:00-07:00"
-  level: 0.08
+  # When the screen is on (night.py). A double tap always sleeps or wakes
+  # it. In window it's asleep unless double-tapped awake, and it sleeps again
+  # idle_seconds after the last touch. Woken in dim, the backlight is level
+  # (0-1), otherwise day_level. Windows: "HH:MM-HH:MM" (may wrap past
+  # midnight), either end may be sunset or sunrise (Home Assistant's
+  # sun.sun); empty: never. Going dark locks the controls.
+  window: "18:00-07:00"
+  dim: "22:00-07:00"
+  level: 0.6
   day_level: 1.0
-  wake_seconds: 60
+  idle_seconds: 300
   sun_entity: sun.sun
 
 room:

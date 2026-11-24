@@ -49,31 +49,102 @@ def test_sun_times():
     assert set(times) == {"sunset"} and times["sunset"].second == 0
 
 
-def test_a_tap_wakes_the_dark_screen_dimmed_for_a_while(tmp_path):
+class Now:
+    def __init__(self, hour, minute=0):
+        self.t = at(hour, minute)
+
+    def __call__(self):
+        return self.t
+
+
+def rules(now, clock=None, backlight=None, metrics=None):
+    """The user's rules (2026-11-23): asleep 18:00-07:00 unless woken, dim
+    after 22:00, 5 minutes idle."""
+    return Night("18:00-07:00", 0.6, 1.0, 300, backlight, metrics, dim="22:00-07:00", now=now, clock=clock or Clock())
+
+
+def test_at_night_only_a_double_tap_wakes_it_and_it_sleeps_when_idle(tmp_path):
     clock, metrics = Clock(), Metrics()
     dev = tmp_path / "panel"
     dev.mkdir()
     (dev / "brightness").write_text("255")
     (dev / "max_brightness").write_text("255")
-    night = Night("21:00-07:00", 0.08, 1.0, 60, Backlight(tmp_path), metrics, now=lambda: at(23), clock=clock)
+    night = rules(Now(19), clock, Backlight(tmp_path), metrics)
     night.apply()
-    assert night.dark and (dev / "brightness").read_text() == "0"
-    assert night.view() == {"is_night": True, "dark": True, "awake_for": 0.0, "wake_seconds": 60}
-    assert night.tap() is True  # only woke it
-    assert (dev / "brightness").read_text() == "20"  # 8% of 255
-    assert night.tap() is False  # awake: a real tap
-    assert night.view()["awake_for"] == 60
-    clock.t += 61
+    assert night.dark
+    assert (dev / "brightness").read_text() == "0"
+    assert night.view() == {"is_night": True, "dark": True, "awake_for": 0.0, "idle_seconds": 300}
+    night.touch()  # a single touch doesn't wake it
+    assert night.dark
+    assert night.double_tap() is True
+    assert not night.dark
+    assert (dev / "brightness").read_text() == "255"  # before 22:00: full
+    clock.t += 200
+    night.touch()  # in use: the 5 minutes start again
+    clock.t += 200
+    assert not night.dark
+    clock.t += 101
     night.apply()
-    assert night.dark and (dev / "brightness").read_text() == "0"
-    assert metrics.get("panel_taps_total", woke="true") == 1
-    assert metrics.get("panel_backlight_level") == 0
+    assert night.dark
+    assert metrics.get("panel_double_taps_total", woke="true") == 1
 
 
-def test_by_day_taps_do_nothing_special():
-    night = Night("21:00-07:00", 0.08, 1.0, 60, now=lambda: at(12))
-    assert night.tap() is False and night.level == 1.0 and not night.dark
-    assert night.view()["is_night"] is False
+def test_a_double_tap_sleeps_it_at_night():
+    night = rules(Now(20))
+    night.double_tap()
+    assert night.double_tap() is False
+    assert night.dark
+
+
+def test_woken_after_ten_it_is_dimmed():
+    night = rules(Now(23, 30))
+    night.double_tap()
+    assert night.level == 0.6
+
+
+def test_by_day_it_stays_on_until_a_double_tap():
+    clock = Clock()
+    night = rules(Now(12), clock)
+    assert not night.dark
+    assert night.level == 1.0
+    clock.t += 3600
+    assert not night.dark  # no idle sleep by day
+    assert night.view()["awake_for"] is None
+    assert night.double_tap() is False
+    assert night.dark
+    assert night.level == 0.0
+    assert night.double_tap() is True
+    assert not night.dark
+
+
+def test_each_night_starts_asleep_and_each_morning_awake():
+    now = Now(17, 59)
+    night = rules(now)
+    night.double_tap()  # put to sleep by day
+    assert night.dark
+    now.t = at(18, 0)
+    assert night.dark  # night: asleep anyway
+    night.double_tap()
+    assert not night.dark
+    now.t = datetime(2026, 11, 23, 7, 0)
+    assert not night.dark  # 07:00: on, and stays on
+    now.t = datetime(2026, 11, 23, 18, 0)
+    assert night.dark  # the next evening starts asleep, not awake from last night
+
+
+def test_a_touch_never_wakes_or_sleeps_it():
+    asleep = rules(Now(21))
+    asleep.touch()
+    assert asleep.dark
+    day = rules(Now(12))
+    day.touch()
+    assert not day.dark
+
+
+def test_without_a_dim_window_woken_is_full_brightness():
+    night = Night("18:00-07:00", 0.6, 1.0, 300, now=Now(23), clock=Clock())
+    night.double_tap()
+    assert night.level == 1.0
 
 
 def test_an_unwritable_backlight_is_left_alone(tmp_path):

@@ -21,8 +21,7 @@ def test_defaults_until_something_is_ticked(tmp_path):
     assert view["gain"] == 1.0
     assert not view["quiet"]
     assert view["quiet_window"] == "22:00-07:00"
-    assert not view["quiet_sound"]
-    assert not view["quiet_alerts"]
+    assert not view["muted"]
 
 
 def test_from_settings_reads_the_sound_section(tmp_path):
@@ -55,17 +54,14 @@ def test_changes_are_saved_and_survive_a_restart(tmp_path):
     s = Sound(DEFAULTS, path)
     assert s.change({"event": "tap", "on": False}) == (True, "")
     assert s.change({"level": "low"}) == (True, "")
-    assert s.change({"switch": "quiet_alerts", "on": True}) == (True, "")
     saved = yaml.safe_load(path.read_text())
     assert saved["events"]["tap"] is False
     assert saved["level"] == "low"
-    assert saved["quiet_alerts"] is True
     again = Sound(DEFAULTS, path).view()
     assert again["events"]["tap"] is False
     assert again["events"]["alert"] is True
     assert again["level"] == "low"
     assert again["gain"] == 0.74
-    assert again["quiet_alerts"] is True
 
 
 @pytest.mark.parametrize(
@@ -74,7 +70,6 @@ def test_changes_are_saved_and_survive_a_restart(tmp_path):
         {"event": "kazoo", "on": True},
         {"event": "tap", "on": "yes"},
         {"level": "eleven"},
-        {"switch": "quiet_everything", "on": True},
         {},
     ],
 )
@@ -104,13 +99,62 @@ def test_an_unreadable_file_falls_back_to_the_defaults(tmp_path):
 
 def test_odd_saved_values_are_ignored(tmp_path):
     path = tmp_path / "sound.yaml"
-    path.write_text(yaml.safe_dump({"events": {"tap": "off", "kazoo": False}, "level": "eleven", "quiet_sound": 1}))
+    path.write_text(yaml.safe_dump({"events": {"tap": "off", "kazoo": False}, "level": "eleven", "quiet_alerts": True}))
     view = Sound(DEFAULTS, path).view()
     assert view["events"]["tap"] is True
     assert "kazoo" not in view["events"]
     assert view["level"] == "medium"
-    assert view["quiet_sound"] is False
+    assert "quiet_alerts" not in view  # from before the mute button
 
 
 def test_an_empty_events_section_is_all_on(tmp_path):
     assert all(Sound({**DEFAULTS, "events": None}, tmp_path / "sound.yaml").view()["events"].values())
+
+
+QUIET = {**DEFAULTS, "quiet_hours": "18:00-08:00"}
+
+
+def test_muted_in_quiet_hours(tmp_path):
+    s = Sound(QUIET, tmp_path / "sound.yaml")
+    assert s.muted(datetime(2026, 11, 23, 18, 0))
+    assert s.muted(datetime(2026, 11, 24, 7, 59))
+    assert not s.muted(datetime(2026, 11, 24, 8, 0))
+
+
+def test_unmuted_in_the_evening_until_eight(tmp_path):
+    s = Sound(QUIET, tmp_path / "sound.yaml")
+    evening = datetime(2026, 11, 23, 21, 0)
+    assert s.toggle(evening) is False
+    assert not s.muted(datetime(2026, 11, 24, 7, 59))
+    assert not s.muted(datetime(2026, 11, 24, 12, 0))  # day: sound anyway
+    assert s.muted(datetime(2026, 11, 24, 18, 0))  # the next evening: muted again
+
+
+def test_muted_by_day_until_six(tmp_path):
+    s = Sound(QUIET, tmp_path / "sound.yaml")
+    assert s.toggle(datetime(2026, 11, 23, 9, 0)) is True
+    assert s.muted(datetime(2026, 11, 23, 17, 59))
+    assert s.muted(datetime(2026, 11, 23, 18, 0))  # quiet hours: muted anyway
+    assert not s.muted(datetime(2026, 11, 24, 8, 0))  # the next morning: sound again
+
+
+def test_the_button_flips_back(tmp_path):
+    s = Sound(QUIET, tmp_path / "sound.yaml")
+    at = datetime(2026, 11, 23, 21, 0)
+    s.toggle(at)
+    assert s.toggle(at) is True
+    assert s.muted(at)
+
+
+def test_without_quiet_hours_the_button_holds(tmp_path):
+    s = Sound({**DEFAULTS, "quiet_hours": ""}, tmp_path / "sound.yaml")
+    assert s.toggle(datetime(2026, 11, 23, 12, 0)) is True
+    assert s.muted(datetime(2027, 1, 1, 12, 0))
+
+
+def test_unmuted_after_sunset_until_sunrise(tmp_path):
+    sun = {"sunset": dtime(17, 5), "sunrise": dtime(7, 10)}
+    s = Sound({**DEFAULTS, "quiet_hours": "sunset-sunrise"}, tmp_path / "sound.yaml", sun=lambda: sun)
+    assert s.toggle(datetime(2026, 11, 23, 20, 0)) is False
+    assert not s.muted(datetime(2026, 11, 24, 7, 9))
+    assert s.muted(datetime(2026, 11, 24, 17, 5))

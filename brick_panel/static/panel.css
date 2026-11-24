@@ -604,3 +604,20 @@ body {
 .set-item .check { position: relative; flex: none; width: 20px; height: 20px; border: 2px solid var(--c); }
 .set-item.on .check { background: var(--c); box-shadow: 0 0 8px var(--c); }
 .set-item:not(.on) span { color: var(--dim); }
+.set-note { margin-top: 14px; font-family: var(--pixel); font-size: 10px; letter-spacing: 2px; line-height: 1.6; color: var(--dim); }
+
+/* The mute button: bottom left, over every screen, under the night. */
+#mute {
+  position: absolute; left: 10px; bottom: 10px; z-index: 35; width: 44px; height: 44px; padding: 0;
+  display: flex; align-items: center; justify-content: center; cursor: none;
+  background: #070612cc; border: 2px solid var(--cyan); box-shadow: 0 0 8px #00eaff55;
+}
+#mute[hidden] { display: none; }
+#mute svg { fill: none; stroke: var(--cyan); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#mute .cone { fill: var(--cyan); }
+#mute .cross { display: none; }
+#mute.muted { border-color: var(--rose); box-shadow: 0 0 8px #ff2a6d55; }
+#mute.muted svg { stroke: var(--rose); }
+#mute.muted .cone { fill: var(--rose); }
+#mute.muted .waves { display: none; }
+#mute.muted .cross { display: inline; }

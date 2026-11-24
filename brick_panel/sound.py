@@ -7,8 +7,10 @@ settings.yaml (that file holds the token and the code, so the page never
 rewrites it), and survives restarts.
 
 Loudness is capped by ALSA on brick1982 (/etc/asound.conf: softvol at most
--25.5 dB); level only picks a gain under that cap. Quiet hours take the
-night's window format ("22:00-07:00", or sunset/sunrise ends).
+-25.5 dB); level only picks a gain under that cap. In quiet hours (the
+night's window format: "18:00-08:00", or sunset/sunrise ends) it's muted.
+The mute button, on every screen, flips that until quiet hours next start
+or end (the user, 2026-11-23: unmuted in the evening until 08:00).
 """
 
 from __future__ import annotations
@@ -20,12 +22,15 @@ import threading
 from collections.abc import Callable
 from datetime import datetime
 from datetime import time as dtime
+from datetime import timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 import yaml
 
 from .night import in_window
 from .night import parse_window
+from .night import resolve
 
 log = logging.getLogger(__name__)
 
@@ -44,12 +49,19 @@ EVENTS = (
 # The page's gain for each level, under the ALSA cap: medium is the day level
 # the user picked (-30.6 dB with the system volume as saved), low -33.2 dB.
 LEVELS = {"low": 0.74, "medium": 1.0}
-SWITCHES = ("quiet_sound", "quiet_alerts")  # play anything / alerts in quiet hours
+
+
+class Override(NamedTuple):
+    """The mute button's flip: muted or not, until when (None: for good)."""
+
+    muted: bool
+    until: datetime | None
 
 
 class Sound:
-    """SETTINGS' sound choices: the defaults with the saved file laid over
-    them. choices is changed only under _lock (the server's threads)."""
+    """SETTINGS' sound choices (the defaults with the saved file laid over
+    them) and the mute button's override. Both change only under _lock (the
+    server's threads)."""
 
     def __init__(
         self,
@@ -67,8 +79,10 @@ class Sound:
         self.choices = {
             "events": {e: bool(events.get(e, True)) for e in EVENTS},
             "level": level if level in LEVELS else "medium",
-            **{s: bool(defaults.get(s, False)) for s in SWITCHES},
         }
+        # The mute button: (muted, until when). Not saved: a restart goes
+        # back to quiet hours.
+        self._override: Override | None = None
         self._load()
 
     @classmethod
@@ -92,9 +106,6 @@ class Sound:
                 self.choices["events"][event] = on
         if saved.get("level") in LEVELS:
             self.choices["level"] = saved["level"]
-        for switch in SWITCHES:
-            if isinstance(saved.get(switch), bool):
-                self.choices[switch] = saved[switch]
 
     def _save(self) -> None:
         """Atomically, so a power cut mid-write leaves the old file."""
@@ -110,8 +121,7 @@ class Sound:
             raise
 
     def change(self, body: dict) -> tuple[bool, str]:
-        """One choice from the page: {"event", "on"}, {"level"}, or
-        {"switch", "on"}. (ok, why not)."""
+        """One choice from SETTINGS: {"event", "on"} or {"level"}. (ok, why not)."""
         with self._lock:
             if "event" in body:
                 if body["event"] not in EVENTS or not isinstance(body.get("on"), bool):
@@ -121,10 +131,6 @@ class Sound:
                 if body["level"] not in LEVELS:
                     return False, "unknown level"
                 self.choices["level"] = body["level"]
-            elif "switch" in body:
-                if body["switch"] not in SWITCHES or not isinstance(body.get("on"), bool):
-                    return False, "unknown switch"
-                self.choices[body["switch"]] = body["on"]
             else:
                 return False, "nothing to change"
             try:
@@ -137,13 +143,42 @@ class Sound:
     def quiet(self, at: datetime | None = None) -> bool:
         return in_window(self.window, at or datetime.now(), self.sun())
 
+    def _next_change(self, at: datetime) -> datetime | None:
+        """When quiet hours next start or end, after at (None: no quiet hours)."""
+        if self.window is None:
+            return None
+        start, end = resolve(self.window, self.sun())
+        when = datetime.combine(at.date(), end if self.quiet(at) else start)
+        return when if when > at else when + timedelta(days=1)
+
+    def _muted_locked(self, at: datetime) -> bool:
+        o = self._override
+        if o is not None and (o.until is None or at < o.until):
+            return o.muted
+        return self.quiet(at)
+
+    def muted(self, at: datetime | None = None) -> bool:
+        with self._lock:
+            return self._muted_locked(at or datetime.now())
+
+    def toggle(self, at: datetime | None = None) -> bool:
+        """The mute button: flip until quiet hours next start or end (or for
+        good, without quiet hours). True when it's muted now. One lock, so two
+        quick presses are two flips."""
+        at = at or datetime.now()
+        with self._lock:
+            muted = not self._muted_locked(at)
+            self._override = Override(muted, self._next_change(at))
+        return muted
+
     def view(self, at: datetime | None = None) -> dict:
-        """The page's copy: the choices, the gain, and whether it's quiet now."""
+        """The page's copy: the choices, the gain, and whether it's muted now."""
         with self._lock:
             choices = {**self.choices, "events": dict(self.choices["events"])}
         return {
             **choices,
             "gain": LEVELS[choices["level"]],
+            "muted": self.muted(at),
             "quiet": self.quiet(at),
             "quiet_window": self.window_text,
         }

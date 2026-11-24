@@ -38,7 +38,7 @@ def make_panel(settings, feeds=None, controls=None, metrics=None, household=None
 def server(settings):
     settings, metrics = demo_settings(settings, night=True), Metrics()
     ha = DemoHomeAssistant(settings)
-    night = Night(settings["night"]["window"], 0.08, 1.0, 60, metrics=metrics)
+    night = Night(settings["night"]["window"], 0.6, 1.0, 300, metrics=metrics)
     controls = Controls.from_settings(settings, ha, metrics, DemoRoom(), night)
     panel = make_panel(settings, demo_feeds(), controls, metrics, Household(settings, ha, metrics), night)
     srv = serve(panel, "127.0.0.1", 0)
@@ -136,7 +136,7 @@ def test_bench_round_trip(server):
 
 def test_controls_through_the_server(server):
     base, panel = server
-    post(base + "/api/wake", {})  # the fixture's always night: awake, or dark locks the controls
+    post(base + "/api/double-tap", {})  # the fixture's always night: awake, or dark locks the controls
     assert post(base + "/api/climate", {"mode": "cool"})["why"] == "locked"
     assert post(base + "/api/unlock", {"code": "1982"})["result"] == "granted"
     answer = post(base + "/api/climate", {"setpoints": {"temperature": 72}})
@@ -160,17 +160,20 @@ def test_shopping_and_calendar_through_the_server(server):
     assert next(i for i in state["household"]["shopping"]["items"] if i["uid"] == first["uid"])["done"]
 
 
-def test_night_wake_through_the_server(server):
+def test_a_double_tap_through_the_server(server):
     base, _ = server
     assert json.loads(get(base + "/api/state")[2])["night"]["dark"] is True
-    assert post(base + "/api/wake", {})["woke"] is True
-    answer = post(base + "/api/wake", {})
-    assert answer["woke"] is False and answer["dark"] is False
+    assert post(base + "/api/wake", {})["awake"] is False  # a single touch doesn't wake it
+    answer = post(base + "/api/double-tap", {})
+    assert answer["awake"] is True
+    assert answer["dark"] is False
+    assert post(base + "/api/wake", {})["awake"] is True
+    assert post(base + "/api/double-tap", {})["awake"] is False
 
 
 def test_going_dark_locks_the_controls(server):
     base, panel = server
-    post(base + "/api/wake", {})
+    post(base + "/api/double-tap", {})
     assert post(base + "/api/unlock", {"code": "1982"})["result"] == "granted"
     panel.night._awake_until = 0  # the wake runs out
     assert json.loads(get(base + "/api/state")[2])["home"]["lock"]["unlocked"] is False
@@ -198,6 +201,8 @@ def test_room_json(server):
         "/api/bench",
         "/api/shopping",
         "/api/wake",
+        "/api/double-tap",
+        "/api/mute",
         "/api/rum",
         "/api/sound",
     ],
@@ -262,3 +267,9 @@ def test_no_sound_is_a_404(server):
     with pytest.raises(urllib.error.HTTPError) as e:
         post(base + "/api/sound", {"level": "low"})
     assert e.value.code == 404
+
+
+def test_the_mute_button(sound_server):
+    before = json.loads(get(sound_server + "/api/state")[2])["sound"]["muted"]
+    assert post(sound_server + "/api/mute", {})["sound"]["muted"] == (not before)
+    assert json.loads(get(sound_server + "/api/state")[2])["sound"]["muted"] == (not before)

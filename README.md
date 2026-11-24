@@ -91,14 +91,28 @@ ok under 200 ms, slow), long tasks, a few seconds of frames sampled each
 minute on the screen that's up, errors (also logged, so in Loki), memory,
 uptime, and how long the state polls take.
 
-## Night
+## Night, and when the screen is on
 
-`night.window` (`21:00-07:00` by default; either end can be `sunset` or
-`sunrise`, from Home Assistant's `sun.sun`; empty for never) turns the
-backlight off and the page black, Home, still. A tap wakes it at
-`night.level` (8%) for `night.wake_seconds` (60 s), and only wakes it:
-nothing under the finger is pressed. Going dark locks the controls. The
-backlight level is `panel_backlight_level` in Prometheus.
+The user's rules (2026-11-23), in `night.py`:
+
+- **A double tap always sleeps the screen, or wakes it.** It counts only
+  on an empty spot, not on a button, billboard or key, so nothing is
+  pressed twice. Asleep, the backlight is off and the page black, Home,
+  still. Going dark locks the controls.
+- **18:00-07:00 (`night.window`): asleep unless double-tapped awake.** A
+  single tap doesn't wake it. Awake, it sleeps again 5 minutes
+  (`night.idle_seconds`) after the last touch, or on a double tap.
+- **Woken 22:00-07:00 (`night.dim`):** the backlight at `night.level`
+  (60%).
+- **By day:** on at `night.day_level`. A double tap sleeps it until a
+  double tap wakes it, or 07:00 does.
+- **Sound** is muted 18:00-08:00 (`sound.quiet_hours`). The mute button
+  in the bottom-left corner of every screen (no code needed) unmutes it
+  until 08:00, or by day mutes it until 18:00.
+
+Either end of a window can be `sunset` or `sunrise` (Home Assistant's
+`sun.sun`); empty is never. The backlight level is `panel_backlight_level`
+in Prometheus, and double taps are `panel_double_taps_total`.
 
 There is no slideshow, and won't be: no photos on brick1982 (the user,
 2026-11-22).
