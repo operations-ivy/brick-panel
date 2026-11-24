@@ -1,8 +1,8 @@
 // Home's surprises, now and then, each spelling one of three names (the
 // server's BRICK_PANEL_NAMES; never in this file): a plane towing a banner
 // across the sky, the city's windows drifting together into letters, and a
-// small neon sign on the far skyline's tall tower, dark until its turn, that
-// sputters on for a few seconds. One at a time, minutes apart (so each name
+// small neon sign on a tall building in the far skyline, dark until its turn,
+// that sputters on for a few seconds. One at a time, minutes apart (so each name
 // shows about as often as the others), only on Home, only by day or awake.
 // The BRICK sign always says BRICK. Like everything on the page, they animate
 // transform and opacity only.
@@ -41,7 +41,7 @@ const Pizazz = (() => {
   };
 
   let home = null, running = null, timer = null, order = [];
-  let built = "", planeEl = null, lightsEl = null, towerEl = null, dots = [];
+  let built = "", planeEl = null, lightsEl = null, skylineEl = null, dots = [];
 
   const names = () => (state && state.names && state.names.length === 3 ? state.names : null);
 
@@ -59,7 +59,7 @@ const Pizazz = (() => {
     const n = names();
     if (!n || !home || built === n.join()) return;
     built = n.join();
-    for (const el of [planeEl, lightsEl, towerEl]) if (el) el.remove();
+    for (const el of [planeEl, lightsEl, skylineEl]) if (el) el.remove();
     planeEl = layer("pz-plane");
     planeEl.innerHTML = `<div class="banner"><span>${esc(n[0])}</span></div><i class="line"></i>
       <svg class="craft" viewBox="0 0 40 16" width="100" height="40" aria-hidden="true">
@@ -77,11 +77,11 @@ const Pizazz = (() => {
     lightsEl = layer("pz-lights");
     // A veil dims the rest of the city's lights while the letters hold.
     lightsEl.innerHTML = `<b class="veil"></b>` + dots.map(([x, y]) => `<i style="left:${x}px;top:${y}px"></i>`).join("");
-    // The tower's sign: the dark tube always there, the lit one over it
+    // The skyline sign: the dark tube always there, the lit one over it
     // only while it's on.
     const letters = [...n[2]].map((c) => `<span>${c}</span>`).join("");
-    towerEl = layer("pz-tower");
-    towerEl.innerHTML = `<div class="tube off">${letters}</div><div class="tube on">${letters}</div>`;
+    skylineEl = layer("pz-skyline");
+    skylineEl.innerHTML = `<div class="tube off">${letters}</div><div class="tube on">${letters}</div>`;
   }
 
   // 1. A plane across the sky, a banner on a line behind it.
@@ -116,9 +116,9 @@ const Pizazz = (() => {
     return { anims, done: anims[0].finished };
   }
 
-  // 3. The tall tower's sign sputters on, glows a while, and goes dark.
-  function tower() {
-    const on = towerEl.querySelector(".on");
+  // 3. The skyline sign sputters on, glows a while, and goes dark.
+  function skyline() {
+    const on = skylineEl.querySelector(".on");
     const sputter = (lit) => on.animate(lit
       ? [{ opacity: 0 }, { opacity: 0.7, offset: 0.25 }, { opacity: 0.1, offset: 0.4 }, { opacity: 1, offset: 0.55 }, { opacity: 0.4, offset: 0.7 }, { opacity: 1 }]
       : [{ opacity: 1 }, { opacity: 0.2, offset: 0.2 }, { opacity: 0.9, offset: 0.35 }, { opacity: 0.1, offset: 0.6 }, { opacity: 0.6, offset: 0.7 }, { opacity: 0 }],
@@ -135,7 +135,7 @@ const Pizazz = (() => {
     return run;
   }
 
-  const SHOWS = [plane, lights, tower];
+  const SHOWS = [plane, lights, skyline];
 
   function play(which) {
     const n = names();
@@ -151,7 +151,7 @@ const Pizazz = (() => {
     const run = running;
     running = null;
     if (!run) return;
-    for (const a of run.anims) a.cancel(); // back out of sight (the tower's sign: dark)
+    for (const a of run.anims) a.cancel(); // back out of sight (the skyline sign: dark)
   }
 
   // Every few minutes, the next of the three (in a shuffled order, so all

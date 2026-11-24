@@ -31,9 +31,6 @@ const Scene = (() => {
     { x: 150, top: 610 - BB_H - RIG, roof: 610 },
     { x: 290, top: 582 - BB_H - RIG, roof: 582 },
   ];
-  // The tall tower in the middle of the far skyline: the third surprise's
-  // sign hangs on its face (pizazz.js; .pz-tower in panel.css).
-  const TOWER = { x: 214, w: 52, top: 396 };
   // Which rooftops the billboards take, by how many there are.
   const SLOTS = { 1: [1], 2: [0, 2], 3: [0, 1, 2] };
   const COLOURS = { alerts: "--red", calendar: "--cyan", shopping: "--green", weather: "--sodium",
@@ -73,7 +70,6 @@ const Scene = (() => {
       }
     };
     layer("#161340", 200, 330, 36, 70, 0.10, (v) => (v < 0.5 ? "rgba(0,234,255,0.30)" : "rgba(157,78,221,0.35)"));
-    paintTower(g, r);
     layer("#0e0b2a", 120, 250, 30, 60, 0.16, (v) => (v < 0.7 ? "rgba(255,179,0,0.55)" : "rgba(0,234,255,0.45)"));
 
     // The near row: fixed, so the billboards and the sign stand on them.
@@ -93,31 +89,6 @@ const Scene = (() => {
       }
     }
     paintRigs(g, rigs);
-  }
-
-  // The far skyline's tallest tower, between the far row and the middle
-  // one: a stepped crown, a spire with a beacon, a few lit windows, and the
-  // brackets its sign hangs from.
-  function paintTower(g, r) {
-    const { x, w } = TOWER, top = TOWER.top - CITY_TOP;
-    g.fillStyle = "#161340";
-    g.fillRect(x, top, w, CITY_H - top);
-    g.fillRect(x + 6, top - 8, w - 12, 8); // the crown's step
-    g.fillRect(x + w / 2 - 1, top - 26, 2, 18); // the spire
-    g.fillStyle = "rgba(255,42,109,0.9)";
-    g.fillRect(x + w / 2 - 1, top - 28, 2, 2); // its beacon
-    g.fillStyle = "#221d58";
-    g.fillRect(x, top, w, 1);
-    for (let wy = top + 10; wy < CITY_H - 6; wy += 11) {
-      for (const wx of [x + 4, x + w - 8]) { // the edges: the sign covers the middle
-        if (r() < 0.18) {
-          g.fillStyle = r() < 0.5 ? "rgba(0,234,255,0.30)" : "rgba(157,78,221,0.35)";
-          g.fillRect(wx, wy, 4, 5);
-        }
-      }
-    }
-    g.fillStyle = "#2a2552";
-    for (const by of [top + 8, top + 96]) g.fillRect(x + w / 2 - 15, by, 30, 2); // the sign's brackets
   }
 
   // The billboards' steelwork, painted once with the city (the signs
