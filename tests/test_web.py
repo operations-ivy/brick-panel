@@ -19,6 +19,7 @@ from brick_panel.household import Household
 from brick_panel.metrics import Metrics
 from brick_panel.night import Night
 from brick_panel.perf import Perf
+from brick_panel.sound import Sound
 from brick_panel.web import is_loopback
 from brick_panel.web import Panel
 from brick_panel.web import serve
@@ -198,6 +199,7 @@ def test_room_json(server):
         "/api/shopping",
         "/api/wake",
         "/api/rum",
+        "/api/sound",
     ],
 )
 def test_controls_are_for_the_panel_only(server, monkeypatch, path):
@@ -225,3 +227,38 @@ def test_surprise_names_only_for_the_panel_itself(settings):
     panel.names = ["ALPHA", "BRAVO", "CHARLIE"]
     assert panel.state(local=True)["names"] == ["ALPHA", "BRAVO", "CHARLIE"]
     assert panel.state()["names"] == []  # a browser on the LAN never sees them
+
+
+@pytest.fixture
+def sound_server(settings, tmp_path):
+    panel = make_panel(settings)
+    panel.sound = Sound(settings["sound"], tmp_path / "sound.yaml")
+    srv = serve(panel, "127.0.0.1", 0)
+    yield f"http://127.0.0.1:{srv.server_address[1]}"
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_state_has_the_sound_choices(sound_server):
+    assert json.loads(get(sound_server + "/api/state")[2])["sound"]["events"]["tap"] is True
+
+
+def test_a_sound_choice_is_kept(sound_server):
+    answer = post(sound_server + "/api/sound", {"event": "tap", "on": False})
+    assert answer["ok"]
+    assert answer["sound"]["events"]["tap"] is False
+    assert json.loads(get(sound_server + "/api/state")[2])["sound"]["events"]["tap"] is False
+
+
+def test_a_bad_sound_choice_is_refused(sound_server):
+    answer = post(sound_server + "/api/sound", {"level": "eleven"})
+    assert not answer["ok"]
+    assert answer["sound"]["level"] == "medium"
+
+
+def test_no_sound_is_a_404(server):
+    base, panel = server
+    assert panel.sound is None
+    with pytest.raises(urllib.error.HTTPError) as e:
+        post(base + "/api/sound", {"level": "low"})
+    assert e.value.code == 404

@@ -54,7 +54,8 @@ function post(path, body) {
 // Where `name` sits relative to Home: an arm direction, "billboard", or null.
 function placeOf(name) {
   for (const [dir, arm] of Object.entries(plus)) if (arm === name) return dir;
-  return billboards.includes(name) ? "billboard" : null;
+  // SETTINGS opens out of the logo like a billboard's app, and closes the same way.
+  return billboards.includes(name) || name === "settings" ? "billboard" : null;
 }
 
 function slide(from, to, dx, dy) {
@@ -67,7 +68,7 @@ function slide(from, to, dx, dy) {
 }
 
 function billboardOrigin(name) {
-  const b = home.querySelector(`.billboard[data-open="${name}"]`);
+  const b = name === "settings" ? home.querySelector(".logo") : home.querySelector(`.billboard[data-open="${name}"]`);
   if (!b) return "50% 70%";
   return `${b.offsetLeft + b.offsetWidth / 2}px ${b.offsetTop + b.offsetHeight / 2}px`;
 }
@@ -138,6 +139,7 @@ async function go(name) {
 
 async function goAndReport(name) {
   const from = current;
+  if (!busy && name !== current && screens[name]) Sfx.play("screen");
   const frames = await go(name);
   if (frames) post("/api/perf", { from, to: name, frames });
 }
@@ -233,6 +235,8 @@ function swipe(dir) {
 function tap(target) {
   if (busy) return;
   const button = current !== "home" && target.closest && target.closest("[data-act]");
+  if (!(button && button.dataset.act === "keypad-digit")) Sfx.play("tap"); // a code key has its own
+  if (current === "home" && target.closest && target.closest(".topbar")) return goAndReport("settings");
   if (button && screens[current].contains(button)) {
     if (!button.disabled && ACTIONS[button.dataset.act]) ACTIONS[button.dataset.act](button.dataset.arg, button);
     return;
@@ -343,12 +347,14 @@ function render() {
   renderAlerts(screens.alerts, state, backOf("alerts"));
   renderControls();
   renderHousehold();
+  renderSettings(screens.settings, state, backOf("settings"));
 }
 
 // ---- State ----
 
 let boot = null;
 let benchSeen = null;
+let alertsSeen = null; // the last alert count, so a new alert sounds once
 let hashDone = false;
 
 async function poll() {
@@ -361,6 +367,11 @@ async function poll() {
     boot = s.boot;
     state = s;
     plus = s.plus || plus;
+    const count = s.alerts && s.alerts.condition !== "UNKNOWN" ? s.alerts.count || 0 : null;
+    if (count !== null) {
+      if (alertsSeen !== null && count > alertsSeen) Sfx.play("alert");
+      alertsSeen = count;
+    }
     if (JSON.stringify(s.billboards) !== JSON.stringify(billboards) || s.hanging !== hanging) {
       billboards = s.billboards;
       hanging = s.hanging;
@@ -388,6 +399,11 @@ async function poll() {
 // three surprises, timing every frame; deploy/bench asked for it and reads
 // the verdict.
 async function bench(run) {
+  Sfx.hush(true);
+  try { await benchRun(run); } finally { Sfx.hush(false); }
+}
+
+async function benchRun(run) {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const tour = [];
   for (const arm of Object.values(plus)) tour.push(arm, "home");
