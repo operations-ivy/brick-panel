@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import tempfile
 import time
 from datetime import datetime
 from datetime import timedelta
+from pathlib import Path
 
 from . import calendar as cal
 from .feeds import DemoFeed
@@ -135,7 +137,8 @@ def demo_feeds() -> dict[str, DemoFeed]:
 
 def demo_settings(settings: dict, night: bool = False) -> dict:
     """The settings --demo needs: a code (1982), two lights and a calendar,
-    unless the settings have their own; never dark, unless night (then always)."""
+    unless the settings have their own; never dark, unless night (then always);
+    sound choices kept in a temporary file, and no quiet hours."""
     settings["climate"]["pin"] = settings["climate"]["pin"] or "1982"
     settings["lights"]["entities"] = settings["lights"]["entities"] or {
         "light.lamp": "Desk",
@@ -143,6 +146,8 @@ def demo_settings(settings: dict, night: bool = False) -> dict:
     }
     settings["calendar"]["entities"] = settings["calendar"]["entities"] or ["calendar.demo"]
     settings["night"]["window"] = "00:00-23:59" if night else ""
+    settings["sound"]["file"] = str(Path(tempfile.gettempdir()) / "brick-panel-demo-sound.yaml")
+    settings["sound"]["quiet_hours"] = ""
     return settings
 
 

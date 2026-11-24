@@ -590,3 +590,17 @@ body {
 .billboard.hanging .chain.l { left: 20px; }
 .billboard.hanging .chain.r { right: 20px; }
 @keyframes sway { 0%, 100% { transform: rotate(-1deg); } 50% { transform: rotate(1deg); } }
+
+/* SETTINGS: the sound checkboxes (sound.js), shopping's tick boxes in cyan. */
+.set-head { font-family: var(--pixel); font-size: 11px; letter-spacing: 3px; color: var(--dim); margin: 14px 0 6px; }
+.set-head:first-child { margin-top: 0; }
+.set-level { display: flex; gap: 12px; }
+.set-level .key { flex: 1; height: 44px; }
+.set-list { display: flex; flex-direction: column; gap: 4px; }
+.set-item {
+  display: flex; align-items: center; gap: 14px; height: 38px; padding: 0 10px; text-align: left;
+  font: inherit; font-size: 20px; color: var(--text); background: var(--panel); border: 1px solid var(--edge); cursor: none;
+}
+.set-item .check { position: relative; flex: none; width: 20px; height: 20px; border: 2px solid var(--c); }
+.set-item.on .check { background: var(--c); box-shadow: 0 0 8px var(--c); }
+.set-item:not(.on) span { color: var(--dim); }

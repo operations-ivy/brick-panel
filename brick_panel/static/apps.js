@@ -6,7 +6,7 @@
 "use strict";
 
 const TITLES = { weather: "WEATHER", climate: "CLIMATE", lights: "LIGHTS", brick: "BRICK", alerts: "ALERTS",
-  calendar: "CALENDAR", shopping: "SHOPPING" };
+  calendar: "CALENDAR", shopping: "SHOPPING", settings: "SETTINGS" };
 
 // ---- Shared ----
 

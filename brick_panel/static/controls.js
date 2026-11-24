@@ -250,12 +250,14 @@ async function enterCode(k) {
   if (!answer) return;
   if (state && state.home) state.home.lock = { ...state.home.lock, ...answer, result: undefined };
   if (answer.result === "granted") {
+    Sfx.play("pin_ok");
     lastTouch = now();
     closeKeypad(k.name);
     renderControls();
     return;
   }
   if (answer.result === "denied") {
+    Sfx.play("pin_bad");
     const left = answer.misses_left;
     k.flash = `ACCESS DENIED: ${left} ATTEMPT${left === 1 ? "" : "S"} LEFT`;
     k.flashUntil = now() + 4000;
@@ -282,7 +284,7 @@ const ACTIONS = {
   },
   "keypad-digit": (d) => {
     const k = keypads[current];
-    if (k && k.code.length < 8) { k.code += d; renderKeypad(k); }
+    if (k && k.code.length < 8) { k.code += d; renderKeypad(k); Sfx.play("pin_key"); }
   },
   "keypad-clear": () => { const k = keypads[current]; if (k) { k.code = ""; renderKeypad(k); } },
   "keypad-enter": () => { const k = keypads[current]; if (k && k.code) enterCode(k); },

@@ -142,6 +142,7 @@ const Pizazz = (() => {
     if (!n || running || busy || dark || current !== "home") return false;
     prepare();
     running = SHOWS[which](n[which]);
+    Sfx.play(["surprise_plane", "surprise_lights", "surprise_sign"][which]);
     const run = running;
     run.done.catch(() => {}).finally(() => { if (running === run) clear(); });
     return true;

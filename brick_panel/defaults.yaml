@@ -98,6 +98,29 @@ shopping:
   entity: todo.shopping_list
   poll_seconds: 30
 
+sound:
+  # The panel's sounds, made by the page (static/sound.js). These are the
+  # defaults; what's ticked in SETTINGS (a tap on the STRAYLIGHT logo) is
+  # saved in file and wins. level: low or medium (both under brick1982's
+  # ALSA cap). quiet_hours: the night's format ("22:00-07:00", sunset/sunrise
+  # ends; empty: never quiet). In quiet hours nothing plays unless
+  # quiet_sound is on; alerts play then only if quiet_alerts is on.
+  file: ~/.config/brick-panel/sound.yaml
+  level: medium
+  quiet_hours: "22:00-07:00"
+  quiet_sound: false
+  quiet_alerts: false
+  events:
+    tap: true
+    screen: true
+    pin_key: true
+    pin_ok: true
+    pin_bad: true
+    alert: true
+    surprise_plane: true
+    surprise_lights: true
+    surprise_sign: true
+
 night:
   # Dark overnight: "HH:MM-HH:MM" (may wrap past midnight), and either end
   # may be sunset or sunrise (Home Assistant's sun.sun). Empty: never dark.

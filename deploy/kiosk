@@ -25,11 +25,13 @@ until python3 -c "import urllib.request as u; u.urlopen('${url}api/state', timeo
 done
 
 # GPU raster and compositing on the Pi 4's V3D (the smooth screen changes
-# depend on it); no pinch zoom, no swipe-back, no first-run or crash bubbles.
+# depend on it); no pinch zoom, no swipe-back, no first-run or crash bubbles;
+# sound without a tap first (an alert must sound on an untouched panel).
 exec chromium --kiosk --ozone-platform=wayland \
     --user-data-dir="$HOME/.cache/brick-panel/chromium" \
     --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble \
     --password-store=basic --disable-pinch --overscroll-history-navigation=0 \
+    --autoplay-policy=no-user-gesture-required \
     --enable-gpu-rasterization --ignore-gpu-blocklist --enable-zero-copy \
     --disable-features=TranslateUI,Translate --check-for-update-interval=31536000 \
     "$url"

@@ -24,6 +24,7 @@ from .night import Night
 from .night import sun_times
 from .perf import Perf
 from .room import Room
+from .sound import Sound
 from .weather import Weather
 from .web import Panel
 from .web import serve
@@ -80,7 +81,10 @@ def main(argv: list[str] | None = None) -> None:
     controls = Controls.from_settings(settings, ha, metrics, room, night)
     household = Household(settings, ha, metrics)
     perf = Perf(settings["perf"], metrics)
-    panel = Panel(settings, weather, perf, metrics, feeds, controls, household, night, names=surprise_names())
+    sound = Sound.from_settings(settings, sun=lambda: sun_times(ha.attrs(sun_entity)))
+    panel = Panel(
+        settings, weather, perf, metrics, feeds, controls, household, night, names=surprise_names(), sound=sound
+    )
     host = args.host or settings["server"]["host"]
     port = args.port or settings["server"]["port"]
     server = serve(panel, host, port)

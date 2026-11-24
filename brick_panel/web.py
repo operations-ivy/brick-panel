@@ -12,6 +12,7 @@ POST /api/unlock      {"code"}: open the panel lock; /api/secure closes it,
 POST /api/climate     {"setpoints": {...}} or {"mode"}: the thermostat
 POST /api/light       {"entity", "on", "pct"?}: a light
 POST /api/shopping    {"uid", "done"}: tick a shopping list item off, or back on
+POST /api/sound       {"event", "on"}, {"level"} or {"switch", "on"}: SETTINGS' sound choices
 POST /api/wake        a tap at night: wakes the screen, says if that's all it did
 POST /api/rum         the page's real-user report (rum.py)
 GET  /room.json       the room sensor's reading, for Home Assistant
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
     from .metrics import Metrics
     from .night import Night
     from .perf import Perf
+    from .sound import Sound
     from .weather import Weather
 
 log = logging.getLogger(__name__)
@@ -66,7 +68,7 @@ mimetypes.add_type("font/woff2", ".woff2")
 mimetypes.add_type("text/javascript", ".js")
 MAX_BODY = 1 << 20
 CONTROLS = {"/api/unlock", "/api/secure", "/api/touch", "/api/climate", "/api/light"}
-LOCAL_ONLY = {"/api/bench", "/api/shopping", "/api/wake", "/api/rum", *CONTROLS}
+LOCAL_ONLY = {"/api/bench", "/api/shopping", "/api/wake", "/api/rum", "/api/sound", *CONTROLS}
 
 
 def is_loopback(client: str) -> bool:
@@ -142,9 +144,10 @@ class Panel:
     household: Household | None = None
     night: Night | None = None
     names: list[str] = field(default_factory=list)  # surprise_names()
+    sound: Sound | None = None
 
     def screens(self) -> list[str]:
-        return ["home", *self.settings["plus"].values(), *self.settings["billboards"]]
+        return ["home", *self.settings["plus"].values(), *self.settings["billboards"], "settings"]
 
     def feed(self, name: str) -> object:
         """A feed's last answer while it's fresh, else None (also when it's off)."""
@@ -173,6 +176,7 @@ class Panel:
             "night": self.night.view() if self.night else None,
             "bench": asdict(run) if (run := self.perf.pending()) else None,
             "names": self.names if local else [],
+            "sound": self.sound.view() if self.sound else None,
         }
 
 
@@ -243,6 +247,11 @@ def handler(panel: Panel):
                 if panel.controls is None:
                     return self.send(404, b"no controls on this panel\n", "text/plain")
                 return self.send_json(control(panel.controls, path, body))
+            if path == "/api/sound":
+                if panel.sound is None:
+                    return self.send(404, b"no sound on this panel\n", "text/plain")
+                ok, why = panel.sound.change(body)
+                return self.send_json({"ok": ok, "why": why, "sound": panel.sound.view()})
             if path.startswith("/api/bench/"):
                 result = panel.perf.finish_bench(path.rsplit("/", 1)[1], body.get("frames") or [])
                 if result is None:
