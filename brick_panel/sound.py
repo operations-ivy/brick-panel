@@ -48,6 +48,9 @@ SWITCHES = ("quiet_sound", "quiet_alerts")  # play anything / alerts in quiet ho
 
 
 class Sound:
+    """SETTINGS' sound choices: the defaults with the saved file laid over
+    them. choices is changed only under _lock (the server's threads)."""
+
     def __init__(
         self,
         defaults: dict,
@@ -59,9 +62,11 @@ class Sound:
         self.window = parse_window(self.window_text)
         self.sun = sun or dict
         self._lock = threading.Lock()
+        events = defaults.get("events") or {}
+        level = defaults.get("level")
         self.choices = {
-            "events": {e: bool(defaults.get("events", {}).get(e, True)) for e in EVENTS},
-            "level": defaults.get("level", "medium") if defaults.get("level") in LEVELS else "medium",
+            "events": {e: bool(events.get(e, True)) for e in EVENTS},
+            "level": level if level in LEVELS else "medium",
             **{s: bool(defaults.get(s, False)) for s in SWITCHES},
         }
         self._load()
