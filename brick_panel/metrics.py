@@ -48,6 +48,7 @@ HELP = {
     "panel_room_reads_total": ("counter", "Room sensor reads, by result."),
     "panel_room_temperature_fahrenheit": ("gauge", "The room's temperature, offset applied."),
     "panel_room_humidity_percent": ("gauge", "The room's relative humidity."),
+    "panel_room_pressure_hpa": ("gauge", "The room's air pressure (BME280 only)."),
     "panel_page_seen_timestamp_seconds": ("gauge", "When the kiosk's page last asked for its state."),
     "panel_screen": ("gauge", "1 for the screen being shown, by screen."),
     "panel_transitions_total": ("counter", "Screen changes, by result: smooth (no frame late) or janky."),
