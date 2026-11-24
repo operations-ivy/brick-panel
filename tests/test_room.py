@@ -103,7 +103,7 @@ STICK_DATA = bytes.fromhex("59ad00848f00662d")
 class FakeBME:
     """A BME280's registers: a read is a one-byte register pointer, then bytes."""
 
-    def __init__(self, chip_id=0x60, data=STICK_DATA, fail=None):
+    def __init__(self, chip_id=R.BME_CHIP_ID, data=STICK_DATA, fail=None):
         self.regs = {R.BME_ID: bytes([chip_id]), R.BME_CALIB_TP: STICK_TP, R.BME_CALIB_H: STICK_H, R.BME_DATA: data}
         self.fail, self.reads, self.writes = fail, [], []
 

@@ -66,6 +66,15 @@ def decode(raw: bytes) -> tuple[float, float]:
     return celsius_to_fahrenheit(-45 + 175 * t / 65535), 100 * rh / 65535
 
 
+class Chip(Protocol):
+    """A room sensor chip: its usual address, and one reading."""
+
+    address: int
+
+    def read(self, device: Device) -> tuple[float, float, float | None]:
+        """(°F, %RH, hPa or None)."""
+
+
 class SHT3x:
     address = 0x44
 
@@ -177,7 +186,7 @@ class BME280:
         return celsius_to_fahrenheit(celsius), humidity, hpa
 
 
-CHIPS = {"sht3x": SHT3x, "bme280": BME280}
+CHIPS: dict[str, type[Chip]] = {"sht3x": SHT3x, "bme280": BME280}
 
 
 class I2C:
@@ -231,8 +240,8 @@ class Room(threading.Thread):
         super().__init__(name="room", daemon=True)
         if chip not in CHIPS:
             raise ValueError(f"room.chip: expected one of {', '.join(CHIPS)}, got {chip!r}")
-        self.chip = CHIPS[chip]()
-        self.device = device or I2C(bus, self.chip.address if address is None else address)
+        self.sensor = CHIPS[chip]()
+        self.device = device or I2C(bus, self.sensor.address if address is None else address)
         self.offset, self.poll_seconds, self.metrics = offset, poll_seconds, metrics
         self._stopping = threading.Event()
         self.temperature: float | None = None
@@ -246,7 +255,7 @@ class Room(threading.Thread):
 
     def poll(self) -> bool:
         try:
-            fahrenheit, humidity, pressure = self.chip.read(self.device)
+            fahrenheit, humidity, pressure = self.sensor.read(self.device)
         except (OSError, ValueError) as e:
             self.error = "NO SENSOR" if isinstance(e, OSError) else "BAD READING"
             if not self._warned:  # once, not every 30 s while it's unplugged
