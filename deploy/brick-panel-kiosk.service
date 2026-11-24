@@ -24,6 +24,8 @@ Environment=XDG_SESSION_TYPE=wayland
 # A transparent cursor theme (deploy/blank-cursors): the touchscreen counts as
 # a pointer, so cage would otherwise draw an arrow on the panel.
 Environment=XCURSOR_PATH=/usr/local/share/brick-panel/cursors XCURSOR_THEME=default
+# Touch turned with the picture (cage doesn't turn it): before cage opens it.
+ExecStartPre=/home/zaphod/brick-panel/deploy/touch-rotation
 ExecStart=/usr/bin/cage -d -- /home/zaphod/brick-panel/deploy/kiosk
 Restart=always
 RestartSec=5
