@@ -271,5 +271,5 @@ def test_no_sound_is_a_404(server):
 
 def test_the_mute_button(sound_server):
     before = json.loads(get(sound_server + "/api/state")[2])["sound"]["muted"]
-    assert post(sound_server + "/api/mute", {})["sound"]["muted"] is (not before)
-    assert json.loads(get(sound_server + "/api/state")[2])["sound"]["muted"] is (not before)
+    assert post(sound_server + "/api/mute", {})["sound"]["muted"] == (not before)
+    assert json.loads(get(sound_server + "/api/state")[2])["sound"]["muted"] == (not before)

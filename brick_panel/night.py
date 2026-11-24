@@ -1,9 +1,11 @@
-"""Night and the backlight: dark overnight, woken (dimmed) by a tap for a
-while. The first tap on a dark screen only wakes it, so nothing is pressed by
-accident (the page swallows it). The backlight is /sys/class/backlight,
-writable by the video group (deploy/90-backlight.rules). Either end of the
-night can be "sunset" or "sunrise", from Home Assistant's sun.sun; until Home
-Assistant has answered, those are FALLBACK. Adapted from rpi_lcars'
+"""When the screen is on, and the backlight. The user's rules (2026-11-23):
+a double tap always sleeps or wakes the screen; overnight it's asleep unless
+double-tapped awake, and sleeps again after a few idle minutes; woken late,
+it's dimmed (Night's docstring has the detail). The page swallows taps on a
+sleeping screen. The backlight is /sys/class/backlight, writable by the
+video group (deploy/90-backlight.rules). Either end of a window can be
+"sunset" or "sunrise", from Home Assistant's sun.sun; until Home Assistant
+has answered, those are FALLBACK. First adapted from rpi_lcars'
 panel/night.py."""
 
 from __future__ import annotations
@@ -52,11 +54,21 @@ def sun_times(attrs: dict) -> dict[str, dtime]:
     return out
 
 
+def resolve(window: Window, sun: dict[str, dtime] | None = None) -> tuple[dtime, dtime]:
+    """A window's start and end as times: sunset and sunrise from sun, or
+    FALLBACK."""
+    sun = sun or {}
+    start, end = window
+    return (
+        sun.get(start, FALLBACK[start]) if isinstance(start, str) else start,
+        sun.get(end, FALLBACK[end]) if isinstance(end, str) else end,
+    )
+
+
 def in_window(window: Window | None, at: datetime, sun: dict[str, dtime] | None = None) -> bool:
     if window is None:
         return False
-    sun = sun or {}
-    start, end = (sun.get(t, FALLBACK[t]) if isinstance(t, str) else t for t in window)
+    start, end = resolve(window, sun)
     t = at.time()
     return start <= t < end if start <= end else t >= start or t < end
 
@@ -98,19 +110,20 @@ class Night:
     def __init__(
         self,
         window: str | None,
-        level: float,
+        dim_level: float,
         day_level: float,
         idle_seconds: float,
         backlight: Backlight | None = None,
         metrics: Metrics | None = None,
+        *,
+        dim: str | None = None,
         now: Callable[[], datetime] = datetime.now,
         clock: Callable[[], float] = time.monotonic,
         sun: Callable[[], dict[str, dtime]] | None = None,
-        dim: str | None = None,
     ) -> None:
         self.window = parse_window(window)
         self.dim = parse_window(dim)
-        self.dim_level, self.day_level = level, day_level
+        self.dim_level, self.day_level = dim_level, day_level
         self.idle_seconds = idle_seconds
         self.backlight, self.metrics = backlight, metrics
         self.now, self.clock = now, clock
@@ -122,42 +135,55 @@ class Night:
         self._stopping = threading.Event()
 
     @classmethod
-    def from_settings(cls, settings: dict, backlight: Backlight | None, metrics: Metrics, sun) -> Night:
+    def from_settings(
+        cls,
+        settings: dict,
+        backlight: Backlight | None,
+        metrics: Metrics,
+        sun: Callable[[], dict[str, dtime]],
+    ) -> Night:
         n = settings["night"]
         return cls(
-            n["window"], n["level"], n["day_level"], n["idle_seconds"], backlight, metrics, sun=sun, dim=n["dim"]
+            n["window"], n["level"], n["day_level"], n["idle_seconds"], backlight, metrics, dim=n["dim"], sun=sun
         )
 
     @property
     def is_night(self) -> bool:
         return in_window(self.window, self.now(), self.sun())
 
-    def _turn(self) -> bool:
-        """is_night, starting each night asleep and each day awake."""
+    def _sync_locked(self) -> bool:
+        """is_night, starting each night asleep and each day awake. Call with
+        _lock held."""
         night = self.is_night
         if night != self._was_night:
             self._awake_until, self._asleep, self._was_night = 0.0, False, night
         return night
 
+    def _dark_locked(self, night: bool) -> bool:
+        return self.clock() >= self._awake_until if night else self._asleep
+
     @property
     def dark(self) -> bool:
         with self._lock:
-            if self._turn():
-                return self.clock() >= self._awake_until
-            return self._asleep
+            return self._dark_locked(self._sync_locked())
 
     @property
     def level(self) -> float:
+        now, sun = self.now(), self.sun()
         if self.dark:
             return 0.0
-        return self.dim_level if in_window(self.dim, self.now(), self.sun()) else self.day_level
+        return self.dim_level if in_window(self.dim, now, sun) else self.day_level
 
     def double_tap(self) -> bool:
         """Sleep the screen, or wake it. True when it's awake now."""
         with self._lock:
-            if self._turn():
-                waking = self.clock() >= self._awake_until
-                self._awake_until = self.clock() + self.idle_seconds if waking else 0.0
+            if self._sync_locked():
+                now = self.clock()
+                waking = now >= self._awake_until
+                if waking:
+                    self._awake_until = now + self.idle_seconds
+                else:
+                    self._awake_until = 0.0
             else:
                 waking = self._asleep
                 self._asleep = not waking
@@ -169,15 +195,17 @@ class Night:
     def touch(self) -> None:
         """A touch on the awake screen: at night, the idle time starts again."""
         with self._lock:
-            if self._turn() and self.clock() < self._awake_until:
+            if self._sync_locked() and self.clock() < self._awake_until:
                 self._awake_until = self.clock() + self.idle_seconds
 
     def view(self) -> dict:
-        dark = self.dark
+        """One consistent snapshot for the page."""
         with self._lock:
-            awake = max(0.0, self._awake_until - self.clock()) if self._was_night else None
+            night = self._sync_locked()
+            dark = self._dark_locked(night)
+            awake = max(0.0, self._awake_until - self.clock()) if night else None
         return {
-            "is_night": bool(self._was_night),
+            "is_night": night,
             "dark": dark,
             "awake_for": None if awake is None else round(awake, 1),  # night: seconds until it sleeps
             "idle_seconds": self.idle_seconds,

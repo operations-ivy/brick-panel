@@ -60,7 +60,7 @@ class Now:
 def rules(now, clock=None, backlight=None, metrics=None):
     """The user's rules (2026-11-23): asleep 18:00-07:00 unless woken, dim
     after 22:00, 5 minutes idle."""
-    return Night("18:00-07:00", 0.6, 1.0, 300, backlight, metrics, now=now, clock=clock or Clock(), dim="22:00-07:00")
+    return Night("18:00-07:00", 0.6, 1.0, 300, backlight, metrics, dim="22:00-07:00", now=now, clock=clock or Clock())
 
 
 def test_at_night_only_a_double_tap_wakes_it_and_it_sleeps_when_idle(tmp_path):
@@ -130,6 +130,21 @@ def test_each_night_starts_asleep_and_each_morning_awake():
     assert not night.dark  # 07:00: on, and stays on
     now.t = datetime(2026, 11, 23, 18, 0)
     assert night.dark  # the next evening starts asleep, not awake from last night
+
+
+def test_a_touch_never_wakes_or_sleeps_it():
+    asleep = rules(Now(21))
+    asleep.touch()
+    assert asleep.dark
+    day = rules(Now(12))
+    day.touch()
+    assert not day.dark
+
+
+def test_without_a_dim_window_woken_is_full_brightness():
+    night = Night("18:00-07:00", 0.6, 1.0, 300, now=Now(23), clock=Clock())
+    night.double_tap()
+    assert night.level == 1.0
 
 
 def test_an_unwritable_backlight_is_left_alone(tmp_path):

@@ -24,12 +24,13 @@ from datetime import datetime
 from datetime import time as dtime
 from datetime import timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 import yaml
 
-from .night import FALLBACK
 from .night import in_window
 from .night import parse_window
+from .night import resolve
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +49,13 @@ EVENTS = (
 # The page's gain for each level, under the ALSA cap: medium is the day level
 # the user picked (-30.6 dB with the system volume as saved), low -33.2 dB.
 LEVELS = {"low": 0.74, "medium": 1.0}
+
+
+class Override(NamedTuple):
+    """The mute button's flip: muted or not, until when (None: for good)."""
+
+    muted: bool
+    until: datetime | None
 
 
 class Sound:
@@ -74,7 +82,7 @@ class Sound:
         }
         # The mute button: (muted, until when). Not saved: a restart goes
         # back to quiet hours.
-        self._override: tuple[bool, datetime] | None = None
+        self._override: Override | None = None
         self._load()
 
     @classmethod
@@ -135,29 +143,32 @@ class Sound:
     def quiet(self, at: datetime | None = None) -> bool:
         return in_window(self.window, at or datetime.now(), self.sun())
 
-    def next_change(self, at: datetime) -> datetime:
-        """When quiet hours next start or end, after at."""
-        sun = self.sun()
-        start, end = (sun.get(t, FALLBACK[t]) if isinstance(t, str) else t for t in self.window)
+    def _next_change(self, at: datetime) -> datetime | None:
+        """When quiet hours next start or end, after at (None: no quiet hours)."""
+        if self.window is None:
+            return None
+        start, end = resolve(self.window, self.sun())
         when = datetime.combine(at.date(), end if self.quiet(at) else start)
         return when if when > at else when + timedelta(days=1)
 
-    def muted(self, at: datetime | None = None) -> bool:
-        at = at or datetime.now()
-        with self._lock:
-            override = self._override
-        if override is not None and at < override[1]:
-            return override[0]
+    def _muted_locked(self, at: datetime) -> bool:
+        o = self._override
+        if o is not None and (o.until is None or at < o.until):
+            return o.muted
         return self.quiet(at)
+
+    def muted(self, at: datetime | None = None) -> bool:
+        with self._lock:
+            return self._muted_locked(at or datetime.now())
 
     def toggle(self, at: datetime | None = None) -> bool:
         """The mute button: flip until quiet hours next start or end (or for
-        good, without quiet hours). True when it's muted now."""
+        good, without quiet hours). True when it's muted now. One lock, so two
+        quick presses are two flips."""
         at = at or datetime.now()
-        muted = not self.muted(at)
-        until = self.next_change(at) if self.window is not None else datetime.max
         with self._lock:
-            self._override = (muted, until)
+            muted = not self._muted_locked(at)
+            self._override = Override(muted, self._next_change(at))
         return muted
 
     def view(self, at: datetime | None = None) -> dict:

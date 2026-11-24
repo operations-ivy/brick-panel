@@ -70,7 +70,6 @@ def test_changes_are_saved_and_survive_a_restart(tmp_path):
         {"event": "kazoo", "on": True},
         {"event": "tap", "on": "yes"},
         {"level": "eleven"},
-        {"switch": "quiet_alerts", "on": True},
         {},
     ],
 )
@@ -100,11 +99,12 @@ def test_an_unreadable_file_falls_back_to_the_defaults(tmp_path):
 
 def test_odd_saved_values_are_ignored(tmp_path):
     path = tmp_path / "sound.yaml"
-    path.write_text(yaml.safe_dump({"events": {"tap": "off", "kazoo": False}, "level": "eleven"}))
+    path.write_text(yaml.safe_dump({"events": {"tap": "off", "kazoo": False}, "level": "eleven", "quiet_alerts": True}))
     view = Sound(DEFAULTS, path).view()
     assert view["events"]["tap"] is True
     assert "kazoo" not in view["events"]
     assert view["level"] == "medium"
+    assert "quiet_alerts" not in view  # from before the mute button
 
 
 def test_an_empty_events_section_is_all_on(tmp_path):
@@ -150,3 +150,11 @@ def test_without_quiet_hours_the_button_holds(tmp_path):
     s = Sound({**DEFAULTS, "quiet_hours": ""}, tmp_path / "sound.yaml")
     assert s.toggle(datetime(2026, 11, 23, 12, 0)) is True
     assert s.muted(datetime(2027, 1, 1, 12, 0))
+
+
+def test_unmuted_after_sunset_until_sunrise(tmp_path):
+    sun = {"sunset": dtime(17, 5), "sunrise": dtime(7, 10)}
+    s = Sound({**DEFAULTS, "quiet_hours": "sunset-sunrise"}, tmp_path / "sound.yaml", sun=lambda: sun)
+    assert s.toggle(datetime(2026, 11, 23, 20, 0)) is False
+    assert not s.muted(datetime(2026, 11, 24, 7, 9))
+    assert s.muted(datetime(2026, 11, 24, 17, 5))

@@ -240,17 +240,17 @@ def handler(panel: Panel):
                 return self.send(403, b"only the panel itself can do that\n", "text/plain")
             if path == "/api/bench":
                 return self.send_json({"id": panel.perf.request_bench()})
-            if path in ("/api/wake", "/api/double-tap"):
-                # Without night the screen is always on: an answer, not an
-                # error, as the page asks on every touch.
+            # Without night the screen is always on: an answer, not an error,
+            # as the page asks on every touch.
+            if path == "/api/wake":
                 if panel.night is None:
                     return self.send_json({"awake": True})
-                if path == "/api/double-tap":
-                    awake = panel.night.double_tap()
-                else:
-                    panel.night.touch()
-                    awake = not panel.night.dark
-                return self.send_json({"awake": awake, **panel.night.view()})
+                panel.night.touch()
+                return self.send_json({"awake": not panel.night.dark, **panel.night.view()})
+            if path == "/api/double-tap":
+                if panel.night is None:
+                    return self.send_json({"awake": True})
+                return self.send_json({"awake": panel.night.double_tap(), **panel.night.view()})
             if path == "/api/mute":
                 if panel.sound is None:
                     return self.send(404, b"no sound on this panel\n", "text/plain")
