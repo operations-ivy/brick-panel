@@ -110,12 +110,16 @@ night:
   sun_entity: sun.sun
 
 room:
-  # The SHT3x on the Pi's I2C bus: upstairs on CLIMATE, and /room.json for
-  # Home Assistant's sensor.bedroom_*. The Pi warms the air near it: offset
-  # (degrees F) corrects that, measured once against a thermometer.
+  # The room sensor on the Pi's I2C bus: upstairs on CLIMATE, and /room.json
+  # for Home Assistant's sensor.bedroom_*. chip: sht3x (an SHT30/31/35) or
+  # bme280 (the Pimoroni Multi-Sensor Stick's, which adds air pressure).
+  # i2c_address: null for the chip's usual one (0x44, 0x76). The Pi warms the
+  # air near it: offset (degrees F) corrects that, measured once against a
+  # thermometer.
   sensor: false
+  chip: sht3x
   i2c_bus: 1
-  i2c_address: 0x44
+  i2c_address: null
   offset: 0
   poll_seconds: 30
 

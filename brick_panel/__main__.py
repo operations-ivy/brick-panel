@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> None:
         )
         room = None
         if r["sensor"]:
-            room = Room(r["i2c_bus"], r["i2c_address"], r["offset"], r["poll_seconds"], metrics)
+            room = Room(r["i2c_bus"], r["i2c_address"], r["offset"], r["poll_seconds"], metrics, chip=r["chip"])
     sources = [weather, *feeds.values(), ha]
     if room is not None:
         sources.append(room)

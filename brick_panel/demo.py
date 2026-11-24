@@ -220,13 +220,18 @@ DEMO_ITEMS = [
 class DemoRoom:
     """The bedroom, made up."""
 
-    temperature, humidity = 71.4, 41.0
+    temperature, humidity, pressure = 71.4, 41.0, 1016.2
 
     def fresh(self) -> bool:
         return True
 
     def document(self) -> dict:
-        return {"up": True, "temperature_f": self.temperature, "humidity": self.humidity}
+        return {
+            "up": True,
+            "temperature_f": self.temperature,
+            "humidity": self.humidity,
+            "pressure_hpa": self.pressure,
+        }
 
     def start(self) -> None:
         pass

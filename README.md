@@ -123,7 +123,11 @@ thermostat's mode has, inside the guardrails, auto's pair at least
 at once and gather for 1.5 s before one call goes to Home Assistant.
 
 `/room.json` serves the room sensor's reading for Home Assistant's
-`sensor.bedroom_*`, as LCARS' did.
+`sensor.bedroom_*`, as LCARS' did: `up`, `temperature_f`, `humidity`, and
+`pressure_hpa` (null on an SHT3x). The sensor is an SHT3x at 0x44 or the
+Pimoroni Multi-Sensor Stick's BME280 at 0x76 (`room.chip`), read straight from
+`/dev/i2c-1` with no packages: the BME280 with its own calibration and Bosch's
+floating-point formulas, in forced mode every 30 s.
 
 ## Smooth screen changes
 
@@ -172,6 +176,7 @@ calendar:
   entities: [calendar.home]   # its name can say where the house is: only here
 room:
   sensor: true
+  chip: bme280    # the Multi-Sensor Stick; sht3x for an SHT30/31/35
 kiosk:
   rotation: 90    # if the panel is turned the other way
 ```

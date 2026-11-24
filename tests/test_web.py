@@ -178,7 +178,12 @@ def test_going_dark_locks_the_controls(server):
 
 def test_room_json(server):
     base, _ = server
-    assert json.loads(get(base + "/room.json")[2]) == {"up": True, "temperature_f": 71.4, "humidity": 41.0}
+    assert json.loads(get(base + "/room.json")[2]) == {
+        "up": True,
+        "temperature_f": 71.4,
+        "humidity": 41.0,
+        "pressure_hpa": 1016.2,
+    }
 
 
 @pytest.mark.parametrize(
