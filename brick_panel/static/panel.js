@@ -145,19 +145,24 @@ async function goAndReport(name) {
 }
 
 // ---- Night ----
-// The server dims and darkens the backlight (night.py); the page follows it:
-// dark, it goes Home, stops its animations and swallows the first tap, which
-// only wakes the screen. awakeUntil is the page's own copy of the server's
-// wake, so that first tap is caught without waiting for a poll.
+// The server decides when the screen sleeps (night.py: the user's rules); the
+// page follows it. Asleep, it goes Home, stops its animations, and only a
+// double tap on it does anything. awakeUntil is the page's own copy of the
+// server's idle time at night, so it goes dark on time between polls.
 
 let awakeUntil = 0, dark = false, lastWake = 0;
 
-function nightNow() {
-  return (state && state.night) || { is_night: false, wake_seconds: 60 };
+function screenDark() {
+  const n = state && state.night;
+  if (!n) return false;
+  return n.is_night ? performance.now() >= awakeUntil : n.dark;
 }
 
-function screenDark() {
-  return nightNow().is_night && performance.now() >= awakeUntil;
+// The server's view of the screen, from a poll or a double tap's answer.
+function takeNight(view) {
+  if (!state || !view || view.is_night === undefined) return;
+  state.night = view;
+  awakeUntil = view.is_night ? performance.now() + (view.awake_for || 0) * 1000 : 0;
 }
 
 function applyDark() {
@@ -176,18 +181,22 @@ function applyDark() {
   }
 }
 
-// A tap at night: wake (or stay awake). True when it only woke the screen.
-function nightTap() {
-  const n = nightNow();
-  if (!n.is_night) return false;
-  const woke = screenDark();
-  awakeUntil = performance.now() + n.wake_seconds * 1000;
-  if (woke || performance.now() - lastWake > 5000) {
+// A double tap: sleep the screen, or wake it.
+async function doubleTap() {
+  takeNight(await post("/api/double-tap", {}));
+  applyDark();
+}
+
+// A touch on the awake screen: at night, its 5 minutes start again (told to
+// the server at most every 5 s).
+function nightTouch() {
+  const n = state && state.night;
+  if (!n || !n.is_night) return;
+  awakeUntil = performance.now() + n.idle_seconds * 1000;
+  if (performance.now() - lastWake > 5000) {
     lastWake = performance.now();
     post("/api/wake", {});
   }
-  applyDark();
-  return woke;
 }
 
 // ---- Touch ----
@@ -233,6 +242,7 @@ function swipe(dir) {
 
 // A tap presses a button or opens a billboard; screens change by swiping.
 function tap(target) {
+  if (target.closest && target.closest("#mute")) return toggleMute(); // on every screen, even mid-change
   if (busy) return;
   const button = current !== "home" && target.closest && target.closest("[data-act]");
   if (!(button && button.dataset.act === "keypad-digit")) Sfx.play("tap"); // a code key has its own
@@ -251,10 +261,19 @@ function tap(target) {
 
 const pointers = new Map();
 const PRESS = [{ transform: "scale(.93)" }, { transform: "scale(1)" }];
+// A double tap: two quick taps close together, on an empty spot (not on
+// anything a tap presses, so nothing is pressed twice). Asleep, anywhere.
+const DOUBLE_MS = 400, DOUBLE_PX = 48;
+let lastTap = null;
+function emptySpot(target) {
+  return !(target.closest && target.closest("button, [data-act], .billboard, .topbar, #mute"));
+}
+
 stage.addEventListener("pointerdown", (e) => {
-  if (nightTap()) { pointers.set(e.pointerId, { swallowed: true }); return; }
-  if ([...pointers.values()].some((p) => p.swallowed)) return;
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: e.timeStamp });
+  const asleep = dark;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: e.timeStamp, asleep });
+  if (asleep) return;
+  nightTouch();
   touched();
   const button = e.target.closest && e.target.closest("[data-act]");
   if (button && !button.disabled) button.animate(PRESS, { duration: 160, easing: "cubic-bezier(.2,.75,.2,1)" });
@@ -263,14 +282,23 @@ stage.addEventListener("pointerdown", (e) => {
 stage.addEventListener("pointerup", (e) => {
   const p = pointers.get(e.pointerId);
   pointers.delete(e.pointerId);
-  if (!p || p.swallowed) return;
+  if (!p) return;
   const dx = e.clientX - p.x, dy = e.clientY - p.y;
   const moved = Math.hypot(dx, dy);
   if (moved < 24 && e.timeStamp - p.t < 800) {
+    const spot = p.asleep || emptySpot(e.target);
+    if (spot && lastTap && e.timeStamp - lastTap.t < DOUBLE_MS &&
+        Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < DOUBLE_PX) {
+      lastTap = null;
+      doubleTap();
+      return;
+    }
+    lastTap = spot ? { t: e.timeStamp, x: e.clientX, y: e.clientY } : null;
+    if (p.asleep) return; // asleep, a single tap does nothing
     tap(e.target);
     RUM.tap(e.timeStamp);
   }
-  else if (e.timeStamp - p.t < SWIPE_MS) {
+  else if (!p.asleep && e.timeStamp - p.t < SWIPE_MS) {
     const dir = swipeDir(dx, dy);
     if (dir) swipe(dir);
   }
@@ -348,6 +376,7 @@ function render() {
   renderControls();
   renderHousehold();
   renderSettings(screens.settings, state, backOf("settings"));
+  renderMute();
 }
 
 // ---- State ----
@@ -377,9 +406,7 @@ async function poll() {
       hanging = s.hanging;
       Scene.build(home, billboards, hanging);
     }
-    if (s.night && s.night.is_night) {
-      awakeUntil = Math.max(awakeUntil, performance.now() + s.night.awake_for * 1000);
-    }
+    takeNight(s.night);
     home.querySelector(".link").classList.remove("down");
     setText(home.querySelector(".link-text"), "LINK");
     applyDark();

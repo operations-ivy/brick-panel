@@ -12,8 +12,10 @@ POST /api/unlock      {"code"}: open the panel lock; /api/secure closes it,
 POST /api/climate     {"setpoints": {...}} or {"mode"}: the thermostat
 POST /api/light       {"entity", "on", "pct"?}: a light
 POST /api/shopping    {"uid", "done"}: tick a shopping list item off, or back on
-POST /api/sound       {"event", "on"}, {"level"} or {"switch", "on"}: SETTINGS' sound choices
-POST /api/wake        a tap at night: wakes the screen, says if that's all it did
+POST /api/sound       {"event", "on"} or {"level"}: SETTINGS' sound choices
+POST /api/mute        the mute button: flips sound until quiet hours next start or end
+POST /api/double-tap  sleeps the screen, or wakes it (night.py)
+POST /api/wake        a touch on the awake screen: its idle time starts again
 POST /api/rum         the page's real-user report (rum.py)
 GET  /room.json       the room sensor's reading, for Home Assistant
 GET  /metrics         Prometheus
@@ -68,7 +70,16 @@ mimetypes.add_type("font/woff2", ".woff2")
 mimetypes.add_type("text/javascript", ".js")
 MAX_BODY = 1 << 20
 CONTROLS = {"/api/unlock", "/api/secure", "/api/touch", "/api/climate", "/api/light"}
-LOCAL_ONLY = {"/api/bench", "/api/shopping", "/api/wake", "/api/rum", "/api/sound", *CONTROLS}
+LOCAL_ONLY = {
+    "/api/bench",
+    "/api/shopping",
+    "/api/wake",
+    "/api/double-tap",
+    "/api/rum",
+    "/api/sound",
+    "/api/mute",
+    *CONTROLS,
+}
 
 
 def is_loopback(client: str) -> bool:
@@ -229,12 +240,22 @@ def handler(panel: Panel):
                 return self.send(403, b"only the panel itself can do that\n", "text/plain")
             if path == "/api/bench":
                 return self.send_json({"id": panel.perf.request_bench()})
-            if path == "/api/wake":
-                # Without night there's nothing to wake: an answer, not an
-                # error, as the page asks on every tap at night.
+            if path in ("/api/wake", "/api/double-tap"):
+                # Without night the screen is always on: an answer, not an
+                # error, as the page asks on every touch.
                 if panel.night is None:
-                    return self.send_json({"woke": False})
-                return self.send_json({"woke": panel.night.tap(), **panel.night.view()})
+                    return self.send_json({"awake": True})
+                if path == "/api/double-tap":
+                    awake = panel.night.double_tap()
+                else:
+                    panel.night.touch()
+                    awake = not panel.night.dark
+                return self.send_json({"awake": awake, **panel.night.view()})
+            if path == "/api/mute":
+                if panel.sound is None:
+                    return self.send(404, b"no sound on this panel\n", "text/plain")
+                panel.sound.toggle()
+                return self.send_json({"sound": panel.sound.view()})
             if path == "/api/rum":
                 rum.record(panel.metrics, body, panel.perf.late_after, panel.screens())
                 return self.send_json({})

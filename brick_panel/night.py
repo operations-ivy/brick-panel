@@ -83,64 +83,104 @@ class Backlight:
 
 
 class Night:
+    """When the screen is on (the user, 2026-11-23):
+
+    - A double tap always sleeps the screen, or wakes it.
+    - Night (window, 18:00-07:00): asleep unless woken by a double tap; a
+      single tap doesn't wake it. Woken, it sleeps again idle_seconds after
+      the last touch, or on a double tap.
+    - Woken in the dim window (22:00-07:00): the backlight at level, not
+      day_level.
+    - Day: on at day_level; a double tap sleeps it until a double tap wakes
+      it, or the morning (the night's end) does.
+    """
+
     def __init__(
         self,
         window: str | None,
-        night_level: float,
+        level: float,
         day_level: float,
-        wake_seconds: float,
+        idle_seconds: float,
         backlight: Backlight | None = None,
         metrics: Metrics | None = None,
         now: Callable[[], datetime] = datetime.now,
         clock: Callable[[], float] = time.monotonic,
         sun: Callable[[], dict[str, dtime]] | None = None,
+        dim: str | None = None,
     ) -> None:
         self.window = parse_window(window)
-        self.night_level, self.day_level = night_level, day_level
-        self.wake_seconds = wake_seconds
+        self.dim = parse_window(dim)
+        self.dim_level, self.day_level = level, day_level
+        self.idle_seconds = idle_seconds
         self.backlight, self.metrics = backlight, metrics
         self.now, self.clock = now, clock
         self.sun = sun or (lambda: {})  # () -> sun_times(...): Home Assistant's sunset and sunrise
-        self._awake_until = 0.0
+        self._awake_until = 0.0  # night: awake until then
+        self._asleep = False  # day: put to sleep by a double tap
+        self._was_night: bool | None = None
+        self._lock = threading.Lock()
         self._stopping = threading.Event()
 
     @classmethod
     def from_settings(cls, settings: dict, backlight: Backlight | None, metrics: Metrics, sun) -> Night:
         n = settings["night"]
-        return cls(n["window"], n["level"], n["day_level"], n["wake_seconds"], backlight, metrics, sun=sun)
+        return cls(
+            n["window"], n["level"], n["day_level"], n["idle_seconds"], backlight, metrics, sun=sun, dim=n["dim"]
+        )
 
     @property
     def is_night(self) -> bool:
         return in_window(self.window, self.now(), self.sun())
 
+    def _turn(self) -> bool:
+        """is_night, starting each night asleep and each day awake."""
+        night = self.is_night
+        if night != self._was_night:
+            self._awake_until, self._asleep, self._was_night = 0.0, False, night
+        return night
+
     @property
     def dark(self) -> bool:
-        return self.is_night and self.clock() >= self._awake_until
+        with self._lock:
+            if self._turn():
+                return self.clock() >= self._awake_until
+            return self._asleep
 
     @property
     def level(self) -> float:
-        if not self.is_night:
-            return self.day_level
-        return 0.0 if self.dark else self.night_level
+        if self.dark:
+            return 0.0
+        return self.dim_level if in_window(self.dim, self.now(), self.sun()) else self.day_level
 
-    def tap(self) -> bool:
-        """A touch. True when it only woke the screen (the page swallows it)."""
-        was_dark = self.dark
-        if self.is_night:
-            self._awake_until = self.clock() + self.wake_seconds
+    def double_tap(self) -> bool:
+        """Sleep the screen, or wake it. True when it's awake now."""
+        with self._lock:
+            if self._turn():
+                waking = self.clock() >= self._awake_until
+                self._awake_until = self.clock() + self.idle_seconds if waking else 0.0
+            else:
+                waking = self._asleep
+                self._asleep = not waking
         if self.metrics:
-            self.metrics.inc("panel_taps_total", woke=str(was_dark).lower())
+            self.metrics.inc("panel_double_taps_total", woke=str(waking).lower())
         self.apply()
-        return was_dark
+        return waking
+
+    def touch(self) -> None:
+        """A touch on the awake screen: at night, the idle time starts again."""
+        with self._lock:
+            if self._turn() and self.clock() < self._awake_until:
+                self._awake_until = self.clock() + self.idle_seconds
 
     def view(self) -> dict:
-        is_night = self.is_night
-        awake = max(0.0, self._awake_until - self.clock()) if is_night else 0.0
+        dark = self.dark
+        with self._lock:
+            awake = max(0.0, self._awake_until - self.clock()) if self._was_night else None
         return {
-            "is_night": is_night,
-            "dark": is_night and awake == 0,
-            "awake_for": round(awake, 1),
-            "wake_seconds": self.wake_seconds,
+            "is_night": bool(self._was_night),
+            "dark": dark,
+            "awake_for": None if awake is None else round(awake, 1),  # night: seconds until it sleeps
+            "idle_seconds": self.idle_seconds,
         }
 
     def apply(self) -> None:

@@ -2,7 +2,7 @@
 // neon blips and chimes. Whether one plays is the server's choice
 // (state.sound, from SETTINGS' checkboxes and quiet hours; sound.py), and
 // how loud is its level under brick1982's ALSA cap. SETTINGS (a tap on the
-// STRAYLIGHT logo) is drawn here too.
+// STRAYLIGHT logo) and the mute button (on every screen) are drawn here too.
 "use strict";
 
 const Sfx = (() => {
@@ -81,13 +81,11 @@ const Sfx = (() => {
     },
   };
 
-  // Whether a sound may play now: its checkbox, then quiet hours (alerts
-  // have their own switch for those).
+  // Whether a sound may play now: not muted (quiet hours, or the mute
+  // button), and its checkbox ticked.
   function allowed(name) {
     const s = state && state.sound;
-    if (!s || hushed || !s.events[name]) return false;
-    if (!s.quiet) return true;
-    return name === "alert" ? s.quiet_alerts : s.quiet_sound;
+    return Boolean(s && !hushed && !s.muted && s.events[name]);
   }
 
   // preview: SETTINGS playing a sound as it's ticked, whatever the rules.
@@ -127,17 +125,15 @@ function renderSettings(el, st, back) {
     paint(shell.body, `<div class="soon">No sound on this panel.</div>`);
     return;
   }
-  badge(shell.badge, s.quiet ? "QUIET HOURS" : "", s.quiet ? "warn" : "");
+  badge(shell.badge, s.muted ? "MUTED" : "", s.muted ? "warn" : "");
   const level = ["low", "medium"].map((l) =>
     `<button class="key mode ${s.level === l ? "on" : ""}" data-act="sound-level" data-arg="${l}">${l.toUpperCase()}</button>`).join("");
   const sounds = Sfx.EVENTS.map((e) => settingsRow("sound-event", e, s.events[e], SOUND_LABELS[e])).join("");
   const quiet = s.quiet_window
-    ? settingsRow("sound-switch", "quiet_sound", s.quiet_sound, `SOUND IN QUIET HOURS`) +
-      settingsRow("sound-switch", "quiet_alerts", s.quiet_alerts, `ALERTS IN QUIET HOURS`)
+    ? `<div class="set-note">MUTED ${esc(s.quiet_window)}. THE SPEAKER BUTTON, BOTTOM LEFT ON EVERY SCREEN, FLIPS IT.</div>`
     : "";
   paint(shell.body, `<div class="set-head">VOLUME</div><div class="set-level">${level}</div>
-    <div class="set-head">SOUNDS</div><div class="set-list">${sounds}</div>
-    ${quiet ? `<div class="set-head">QUIET HOURS ${esc(s.quiet_window)}</div><div class="set-list">${quiet}</div>` : ""}`);
+    <div class="set-head">SOUNDS</div><div class="set-list">${sounds}</div>${quiet}`);
 }
 
 // A change shows at once, then the server's answer (the saved choices) wins.
@@ -160,8 +156,27 @@ Object.assign(ACTIONS, {
     changeSound({ level }, (s) => { s.level = level; s.gain = level === "low" ? 0.74 : 1; });
     setTimeout(() => Sfx.play("pin_ok", true), 50);
   },
-  "sound-switch": (name) => {
-    const on = !state.sound[name];
-    changeSound({ switch: name, on }, (s) => { s[name] = on; });
-  },
 });
+
+// ---- The mute button, on every screen, no code needed ----
+
+const muteEl = document.getElementById("mute");
+
+function renderMute() {
+  const s = state && state.sound;
+  muteEl.hidden = !s;
+  if (!s) return;
+  muteEl.classList.toggle("muted", s.muted);
+  muteEl.setAttribute("aria-label", s.muted ? "Unmute" : "Mute");
+}
+
+async function toggleMute() {
+  if (!state || !state.sound) return;
+  state.sound.muted = !state.sound.muted; // at once; the server's answer wins
+  renderMute();
+  const answer = await post("/api/mute", {});
+  if (answer && answer.sound) state.sound = answer.sound;
+  renderMute();
+  renderSettings(screens.settings, state, backOf("settings"));
+  if (!state.sound.muted) Sfx.play("pin_ok");
+}
