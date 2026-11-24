@@ -557,6 +557,19 @@ body {
 .pz-plane .craft .glass { fill: var(--cyan); }
 .pz-plane .craft .beacon { fill: var(--red); animation: blink 1s steps(2) infinite; }
 .pz-lights { inset: 0; }
+/* The tall tower's sign (scene.js' TOWER): BRICK's style, smaller, behind
+   the billboards. The dark tube shows always; the lit one only on its turn. */
+.pz-tower { top: 408px; left: 240px; transform: translateX(-50%); }
+.pz-tower .tube {
+  display: flex; flex-direction: column; align-items: center; padding: 4px 3px;
+  border: 1px solid #3a1530; background: #0b0208;
+  font-family: var(--pixel); font-weight: 700; font-size: 11px; line-height: 1.05; color: #3d1f30;
+}
+.pz-tower .on {
+  position: absolute; inset: 0; opacity: 0; will-change: opacity;
+  border-color: var(--violet); color: #f0dcff;
+  box-shadow: 0 0 7px var(--violet), inset 0 0 5px #9d4edd66; text-shadow: 0 0 3px var(--violet), 0 0 8px var(--violet);
+}
 .pz-lights i { position: absolute; width: 5px; height: 6px; background: var(--amber); box-shadow: 0 0 5px #ffb30099;
   opacity: 0; will-change: transform, opacity; }
 .pz-lights .veil { position: absolute; left: 0; right: 0; top: 618px; bottom: 0; background: #05040c; opacity: 0;
