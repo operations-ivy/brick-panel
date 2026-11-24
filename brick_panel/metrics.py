@@ -26,7 +26,7 @@ HELP = {
     "panel_calendar_up": ("gauge", "1 while every calendar answers."),
     "panel_calendar_events_today": ("gauge", "Events on the calendars today."),
     "panel_backlight_level": ("gauge", "The backlight, 0 (off) to 1 (full)."),
-    "panel_taps_total": ("counter", "Taps at night, by woke (true: the tap only woke the screen)."),
+    "panel_double_taps_total": ("counter", "Double taps, by woke (true: woke the screen, false: put it to sleep)."),
     "panel_rum_taps_total": (
         "counter",
         "Taps on the page, by speed to the next frame (fast <100 ms, ok <200 ms, slow).",
