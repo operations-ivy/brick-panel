@@ -188,10 +188,11 @@ class Night:
 
     @property
     def level(self) -> float:
-        now, sun = self.now(), self.sun()
         if self.dark:
             return 0.0
-        return self.dim_level if self.guest() and in_window(self.dim, now, sun) else self.day_level
+        if self.guest() and in_window(self.dim, self.now(), self.sun()):
+            return self.dim_level
+        return self.day_level
 
     def double_tap(self) -> bool:
         """Sleep the screen, or wake it. True when it's awake now."""

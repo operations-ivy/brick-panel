@@ -265,14 +265,15 @@ def handler(panel: Panel):
                 if panel.guest is None:
                     return self.send(404, b"no guest mode on this panel\n", "text/plain")
                 ok, why = panel.guest.change(body)
-                if panel.night is not None:
-                    panel.night.apply()  # the backlight follows at once, not at the next second
+                night = panel.night
+                if night is not None:
+                    night.apply()  # the backlight follows at once, not at the next second
                 return self.send_json(
                     {
                         "ok": ok,
                         "why": why,
                         "guest": panel.guest.view(),
-                        "night": panel.night.view() if panel.night else None,
+                        "night": night.view() if night is not None else None,
                         "sound": panel.sound.view() if panel.sound else None,
                     }
                 )

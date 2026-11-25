@@ -50,8 +50,9 @@ EVENTS = (
     "surprise_lights",
     "surprise_sign",
 )
-# The page's gain for each level, under the ALSA cap: medium is the day level
-# the user picked (-30.6 dB with the system volume as saved), low -33.2 dB.
+# The page's gain for each level, under the ALSA cap: medium is the system
+# volume as saved (85%, -29.3 dB), low 2.6 dB under it (75%, -31.9 dB): the
+# user's levels, each raised 5% on 2026-11-24 (were 80% and 70%).
 LEVELS = {"low": 0.74, "medium": 1.0}
 
 
@@ -61,7 +62,7 @@ class Override(NamedTuple):
 
     muted: bool
     until: datetime | None
-    guest: bool
+    in_guest_mode: bool
 
 
 class Sound:
@@ -167,7 +168,7 @@ class Sound:
 
     def _muted_locked(self, at: datetime) -> bool:
         o = self._override
-        if o is not None and o.guest == self.guest() and (o.until is None or at < o.until):
+        if o is not None and o.in_guest_mode == self.guest() and (o.until is None or at < o.until):
             return o.muted
         return self.quiet(at)
 
@@ -177,8 +178,8 @@ class Sound:
 
     def toggle(self, at: datetime | None = None) -> bool:
         """The mute button: flip until quiet hours next start or end (or for
-        good, without quiet hours or in office mode). True when it's muted now. One lock, so two
-        quick presses are two flips."""
+        good, without quiet hours or in office mode). True when it's muted
+        now. One lock, so two quick presses are two flips."""
         at = at or datetime.now()
         with self._lock:
             muted = not self._muted_locked(at)

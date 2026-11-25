@@ -56,6 +56,8 @@ class Guest:
             return
         if isinstance(saved, dict) and isinstance(saved.get("active"), bool):
             self._on = saved["active"]
+        else:
+            log.warning("guest: %s has no active: true or false; using the default", self.path)
 
     def _save(self, on: bool) -> None:
         """Atomically, so a power cut mid-write leaves the old file."""
