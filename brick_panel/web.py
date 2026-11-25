@@ -14,6 +14,7 @@ POST /api/light       {"entity", "on", "pct"?}: a light
 POST /api/shopping    {"uid", "done"}: tick a shopping list item off, or back on
 POST /api/sound       {"event", "on"} or {"level"}: SETTINGS' sound choices
 POST /api/mute        the mute button: flips sound until quiet hours next start or end
+POST /api/guest       {"on"}: guest mode (the night rules) or office mode (guest.py)
 POST /api/double-tap  sleeps the screen, or wakes it (night.py)
 POST /api/wake        a touch on the awake screen: its idle time starts again
 POST /api/rum         the page's real-user report (rum.py)
@@ -54,6 +55,7 @@ if TYPE_CHECKING:
     from .demo import DemoWeather
     from .feeds import DemoFeed
     from .feeds import JsonFeed
+    from .guest import Guest
     from .household import Household
     from .metrics import Metrics
     from .night import Night
@@ -78,6 +80,7 @@ LOCAL_ONLY = {
     "/api/rum",
     "/api/sound",
     "/api/mute",
+    "/api/guest",
     *CONTROLS,
 }
 
@@ -156,6 +159,7 @@ class Panel:
     night: Night | None = None
     names: list[str] = field(default_factory=list)  # surprise_names()
     sound: Sound | None = None
+    guest: Guest | None = None
 
     def screens(self) -> list[str]:
         return ["home", *self.settings["plus"].values(), *self.settings["billboards"], "settings"]
@@ -188,6 +192,7 @@ class Panel:
             "bench": asdict(run) if (run := self.perf.pending()) else None,
             "names": self.names if local else [],
             "sound": self.sound.view() if self.sound else None,
+            "guest": self.guest.view() if self.guest else None,
         }
 
 
@@ -256,6 +261,21 @@ def handler(panel: Panel):
                     return self.send(404, b"no sound on this panel\n", "text/plain")
                 panel.sound.toggle()
                 return self.send_json({"sound": panel.sound.view()})
+            if path == "/api/guest":
+                if panel.guest is None:
+                    return self.send(404, b"no guest mode on this panel\n", "text/plain")
+                ok, why = panel.guest.change(body)
+                if panel.night is not None:
+                    panel.night.apply()  # the backlight follows at once, not at the next second
+                return self.send_json(
+                    {
+                        "ok": ok,
+                        "why": why,
+                        "guest": panel.guest.view(),
+                        "night": panel.night.view() if panel.night else None,
+                        "sound": panel.sound.view() if panel.sound else None,
+                    }
+                )
             if path == "/api/rum":
                 rum.record(panel.metrics, body, panel.perf.late_after, panel.screens())
                 return self.send_json({})

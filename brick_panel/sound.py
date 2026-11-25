@@ -11,6 +11,10 @@ Loudness is capped by ALSA on brick1982 (/etc/asound.conf: softvol at most
 night's window format: "18:00-08:00", or sunset/sunrise ends) it's muted.
 The mute button, on every screen, flips that until quiet hours next start
 or end (the user, 2026-11-23: unmuted in the evening until 08:00).
+
+Quiet hours are guest mode's (guest.py, 2026-11-24): in office mode, the
+default, it's never muted on a timer, and the mute button holds until it's
+pressed again. Switching modes drops the button's flip.
 """
 
 from __future__ import annotations
@@ -52,10 +56,12 @@ LEVELS = {"low": 0.74, "medium": 1.0}
 
 
 class Override(NamedTuple):
-    """The mute button's flip: muted or not, until when (None: for good)."""
+    """The mute button's flip: muted or not, until when (None: for good), and
+    the mode it was made in (it lapses when the mode changes)."""
 
     muted: bool
     until: datetime | None
+    guest: bool
 
 
 class Sound:
@@ -68,11 +74,13 @@ class Sound:
         defaults: dict,
         path: str | Path,
         sun: Callable[[], dict[str, dtime]] | None = None,
+        guest: Callable[[], bool] | None = None,
     ) -> None:
         self.path = Path(path).expanduser()
         self.window_text = (defaults.get("quiet_hours") or "").strip()
         self.window = parse_window(self.window_text)
         self.sun = sun or dict
+        self.guest = guest or (lambda: True)  # () -> bool: quiet hours apply (guest.Guest)
         self._lock = threading.Lock()
         events = defaults.get("events") or {}
         level = defaults.get("level")
@@ -86,9 +94,14 @@ class Sound:
         self._load()
 
     @classmethod
-    def from_settings(cls, settings: dict, sun: Callable[[], dict[str, dtime]] | None = None) -> Sound:
+    def from_settings(
+        cls,
+        settings: dict,
+        sun: Callable[[], dict[str, dtime]] | None = None,
+        guest: Callable[[], bool] | None = None,
+    ) -> Sound:
         s = settings["sound"]
-        return cls(s, s["file"], sun)
+        return cls(s, s["file"], sun, guest)
 
     def _load(self) -> None:
         """Lay the saved choices over the defaults, keeping only what's valid."""
@@ -141,11 +154,12 @@ class Sound:
         return True, ""
 
     def quiet(self, at: datetime | None = None) -> bool:
-        return in_window(self.window, at or datetime.now(), self.sun())
+        return self.guest() and in_window(self.window, at or datetime.now(), self.sun())
 
     def _next_change(self, at: datetime) -> datetime | None:
-        """When quiet hours next start or end, after at (None: no quiet hours)."""
-        if self.window is None:
+        """When quiet hours next start or end, after at (None: no quiet hours,
+        or office mode)."""
+        if self.window is None or not self.guest():
             return None
         start, end = resolve(self.window, self.sun())
         when = datetime.combine(at.date(), end if self.quiet(at) else start)
@@ -153,7 +167,7 @@ class Sound:
 
     def _muted_locked(self, at: datetime) -> bool:
         o = self._override
-        if o is not None and (o.until is None or at < o.until):
+        if o is not None and o.guest == self.guest() and (o.until is None or at < o.until):
             return o.muted
         return self.quiet(at)
 
@@ -163,12 +177,12 @@ class Sound:
 
     def toggle(self, at: datetime | None = None) -> bool:
         """The mute button: flip until quiet hours next start or end (or for
-        good, without quiet hours). True when it's muted now. One lock, so two
+        good, without quiet hours or in office mode). True when it's muted now. One lock, so two
         quick presses are two flips."""
         at = at or datetime.now()
         with self._lock:
             muted = not self._muted_locked(at)
-            self._override = Override(muted, self._next_change(at))
+            self._override = Override(muted, self._next_change(at), self.guest())
         return muted
 
     def view(self, at: datetime | None = None) -> dict:
@@ -180,5 +194,5 @@ class Sound:
             "gain": LEVELS[choices["level"]],
             "muted": self.muted(at),
             "quiet": self.quiet(at),
-            "quiet_window": self.window_text,
+            "quiet_window": self.window_text if self.guest() else "",
         }

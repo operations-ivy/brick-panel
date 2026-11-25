@@ -25,6 +25,7 @@ HELP = {
     "panel_relocks_total": ("counter", "The panel lock closing, by reason (idle, button, dark)."),
     "panel_calendar_up": ("gauge", "1 while every calendar answers."),
     "panel_calendar_events_today": ("gauge", "Events on the calendars today."),
+    "panel_guest_mode": ("gauge", "1 in guest mode (the night rules apply), 0 in office mode."),
     "panel_backlight_level": ("gauge", "The backlight, 0 (off) to 1 (full)."),
     "panel_double_taps_total": ("counter", "Double taps, by woke (true: woke the screen, false: put it to sleep)."),
     "panel_rum_taps_total": (

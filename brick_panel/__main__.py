@@ -16,6 +16,7 @@ from .demo import demo_settings
 from .demo import DemoHomeAssistant
 from .demo import DemoRoom
 from .demo import DemoWeather
+from .guest import Guest
 from .homeassistant import HomeAssistant
 from .household import Household
 from .metrics import Metrics
@@ -76,14 +77,29 @@ def main(argv: list[str] | None = None) -> None:
         source.start()
     sun_entity = settings["night"]["sun_entity"]
     backlight = None if args.demo else Backlight()
-    night = Night.from_settings(settings, backlight, metrics, sun=lambda: sun_times(ha.attrs(sun_entity)))
+
+    def sun() -> dict:
+        return sun_times(ha.attrs(sun_entity))
+
+    guest = Guest.from_settings(settings, metrics)
+    night = Night.from_settings(settings, backlight, metrics, sun=sun, guest=guest)
     night.start()
     controls = Controls.from_settings(settings, ha, metrics, room, night)
     household = Household(settings, ha, metrics)
     perf = Perf(settings["perf"], metrics)
-    sound = Sound.from_settings(settings, sun=lambda: sun_times(ha.attrs(sun_entity)))
+    sound = Sound.from_settings(settings, sun=sun, guest=guest)
     panel = Panel(
-        settings, weather, perf, metrics, feeds, controls, household, night, names=surprise_names(), sound=sound
+        settings,
+        weather,
+        perf,
+        metrics,
+        feeds,
+        controls,
+        household,
+        night,
+        names=surprise_names(),
+        sound=sound,
+        guest=guest,
     )
     host = args.host or settings["server"]["host"]
     port = args.port or settings["server"]["port"]

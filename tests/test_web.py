@@ -15,6 +15,7 @@ from brick_panel.demo import demo_settings
 from brick_panel.demo import DemoHomeAssistant
 from brick_panel.demo import DemoRoom
 from brick_panel.demo import DemoWeather
+from brick_panel.guest import Guest
 from brick_panel.household import Household
 from brick_panel.metrics import Metrics
 from brick_panel.night import Night
@@ -205,6 +206,7 @@ def test_room_json(server):
         "/api/mute",
         "/api/rum",
         "/api/sound",
+        "/api/guest",
     ],
 )
 def test_controls_are_for_the_panel_only(server, monkeypatch, path):
@@ -273,3 +275,32 @@ def test_the_mute_button(sound_server):
     before = json.loads(get(sound_server + "/api/state")[2])["sound"]["muted"]
     assert post(sound_server + "/api/mute", {})["sound"]["muted"] == (not before)
     assert json.loads(get(sound_server + "/api/state")[2])["sound"]["muted"] == (not before)
+
+
+@pytest.fixture
+def guest_server(settings, tmp_path):
+    panel = make_panel(settings)
+    panel.guest = Guest(False, tmp_path / "guest.yaml", panel.metrics)
+    panel.night = Night("00:00-23:59", 0.6, 1.0, 300, guest=panel.guest)  # always night, in guest mode
+    panel.sound = Sound({**settings["sound"], "quiet_hours": "00:00-23:59"}, tmp_path / "sound.yaml", guest=panel.guest)
+    srv = serve(panel, "127.0.0.1", 0)
+    yield f"http://127.0.0.1:{srv.server_address[1]}", panel
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_guest_mode_switches_the_night_rules(guest_server):
+    base, panel = guest_server
+    state = json.loads(get(base + "/api/state")[2])
+    assert state["guest"] == {"on": False}
+    assert state["night"]["dark"] is False and state["sound"]["muted"] is False  # office: on, sound
+    answer = post(base + "/api/guest", {"on": True})
+    assert answer["ok"] and answer["guest"] == {"on": True}
+    assert answer["night"]["dark"] is True and answer["sound"]["muted"] is True  # guest: the night rules
+    assert "panel_guest_mode 1" in get(base + "/metrics")[2].decode()
+
+
+def test_a_bad_guest_mode_is_refused(guest_server):
+    base, _ = guest_server
+    answer = post(base + "/api/guest", {"on": "yes"})
+    assert not answer["ok"] and answer["guest"] == {"on": False}

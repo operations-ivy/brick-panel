@@ -2,7 +2,8 @@
 // neon blips and chimes. Whether one plays is the server's choice
 // (state.sound, from SETTINGS' checkboxes and quiet hours; sound.py), and
 // how loud is its level under brick1982's ALSA cap. SETTINGS (a tap on the
-// STRAYLIGHT logo) and the mute button (on every screen) are drawn here too.
+// STRAYLIGHT logo) and the mute button (on every screen) are drawn here too,
+// with SETTINGS' office / guest switch (guest.py: which rules apply).
 "use strict";
 
 const Sfx = (() => {
@@ -116,23 +117,35 @@ function settingsRow(act, arg, on, label) {
   return `<button class="set-item ${on ? "on" : ""}" data-act="${act}" data-arg="${arg}"><i class="check"></i><span>${label}</span></button>`;
 }
 
+// Office: always on, sleeps only on a double tap. Guest: the night rules.
+function modeHtml(g) {
+  if (!g) return "";
+  const key = (on, label) =>
+    `<button class="key mode ${g.on === on ? "on" : ""}" data-act="guest-mode" data-arg="${on}">${label}</button>`;
+  const note = g.on
+    ? "GUEST: ASLEEP 18:00-07:00 UNLESS DOUBLE-TAPPED, DIMMED LATE, QUIET 18:00-08:00."
+    : "OFFICE: ALWAYS ON. A DOUBLE TAP SLEEPS IT UNTIL A DOUBLE TAP WAKES IT.";
+  return `<div class="set-head">MODE</div><div class="set-level">${key(false, "OFFICE")}${key(true, "GUEST")}</div>
+    <div class="set-note mode-note">${note}</div>`;
+}
+
 function renderSettings(el, st, back) {
   const shell = appShell(el, "settings", back);
   setText(shell.kicker, "STRAYLIGHT // PANEL SETTINGS");
-  const s = st.sound;
+  const s = st.sound, mode = modeHtml(st.guest);
   if (!s) {
-    badge(shell.badge, "OFF", "dim");
-    paint(shell.body, `<div class="soon">No sound on this panel.</div>`);
+    badge(shell.badge, st.guest && st.guest.on ? "GUEST" : "", "");
+    paint(shell.body, `${mode}<div class="set-head">SOUNDS</div><div class="soon">No sound on this panel.</div>`);
     return;
   }
-  badge(shell.badge, s.muted ? "MUTED" : "", s.muted ? "warn" : "");
+  badge(shell.badge, s.muted ? "MUTED" : st.guest && st.guest.on ? "GUEST" : "", s.muted ? "warn" : "");
   const level = ["low", "medium"].map((l) =>
     `<button class="key mode ${s.level === l ? "on" : ""}" data-act="sound-level" data-arg="${l}">${l.toUpperCase()}</button>`).join("");
   const sounds = Sfx.EVENTS.map((e) => settingsRow("sound-event", e, s.events[e], SOUND_LABELS[e])).join("");
   const quiet = s.quiet_window
     ? `<div class="set-note">MUTED ${esc(s.quiet_window)}. THE SPEAKER BUTTON, BOTTOM LEFT ON EVERY SCREEN, FLIPS IT.</div>`
     : "";
-  paint(shell.body, `<div class="set-head">VOLUME</div><div class="set-level">${level}</div>
+  paint(shell.body, `${mode}<div class="set-head">VOLUME</div><div class="set-level">${level}</div>
     <div class="set-head">SOUNDS</div><div class="set-list">${sounds}</div>${quiet}`);
 }
 
@@ -146,7 +159,23 @@ async function changeSound(body, apply) {
   renderSettings(screens.settings, state, backOf("settings"));
 }
 
+// Office or guest: shown at once; the server's answer (the screen and the
+// sound under the new rules) wins.
+async function changeGuest(on) {
+  if (!state || !state.guest) return;
+  state.guest.on = on;
+  renderSettings(screens.settings, state, backOf("settings"));
+  const answer = await post("/api/guest", { on });
+  if (answer && answer.guest) state.guest = answer.guest;
+  if (answer && answer.sound) state.sound = answer.sound;
+  if (answer && answer.night) takeNight(answer.night);
+  renderSettings(screens.settings, state, backOf("settings"));
+  renderMute();
+  applyDark();
+}
+
 Object.assign(ACTIONS, {
+  "guest-mode": (arg) => changeGuest(arg === "true"),
   "sound-event": (event) => {
     const on = !state.sound.events[event];
     changeSound({ event, on }, (s) => { s.events[event] = on; });

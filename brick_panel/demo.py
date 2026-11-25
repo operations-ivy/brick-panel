@@ -148,6 +148,7 @@ def demo_settings(settings: dict, night: bool = False) -> dict:
     settings["night"]["window"] = "00:00-23:59" if night else ""
     settings["sound"]["file"] = str(Path(tempfile.gettempdir()) / "brick-panel-demo-sound.yaml")
     settings["sound"]["quiet_hours"] = ""
+    settings["guest"]["file"] = str(Path(tempfile.gettempdir()) / "brick-panel-demo-guest.yaml")
     return settings
 
 

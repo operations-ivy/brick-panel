@@ -102,7 +102,8 @@ sound:
   # The panel's sounds, made by the page (static/sound.js). These are the
   # defaults; what's ticked in SETTINGS (a tap on the STRAYLIGHT logo) is
   # saved in file and wins. level: low or medium (both under brick1982's
-  # ALSA cap). quiet_hours: muted then (the night's format; empty: never).
+  # ALSA cap). quiet_hours: muted then, in guest mode (the night's format;
+  # empty: never).
   # The mute button, on every screen, flips that until the next change:
   # unmuted in quiet hours until they end, muted by day until they start.
   file: ~/.config/brick-panel/sound.yaml
@@ -119,8 +120,17 @@ sound:
     surprise_lights: true
     surprise_sign: true
 
+guest:
+  # Office or guest mode (guest.py). Office (on: false): the screen always
+  # on unless a double tap sleeps it, the sound never muted on a timer. Guest
+  # (on: true): night's window and dim, and sound's quiet_hours, apply.
+  # SETTINGS switches it; the choice is saved in file and wins.
+  on: false
+  file: ~/.config/brick-panel/guest.yaml
+
 night:
-  # When the screen is on (night.py). A double tap always sleeps or wakes
+  # When the screen is on (night.py), in guest mode; in office mode it's
+  # always on unless double-tapped asleep. A double tap always sleeps or wakes
   # it. In window it's asleep unless double-tapped awake, and it sleeps again
   # idle_seconds after the last touch. Woken in dim, the backlight is level
   # (0-1), otherwise day_level. Windows: "HH:MM-HH:MM" (may wrap past

@@ -605,6 +605,7 @@ body {
 .set-item.on .check { background: var(--c); box-shadow: 0 0 8px var(--c); }
 .set-item:not(.on) span { color: var(--dim); }
 .set-note { margin-top: 14px; font-family: var(--pixel); font-size: 10px; letter-spacing: 2px; line-height: 1.6; color: var(--dim); }
+.set-note.mode-note { margin-top: 8px; }
 
 /* The mute button: bottom left, over every screen, under the night. */
 #mute {
