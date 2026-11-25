@@ -44,7 +44,7 @@ class Guest:
     @classmethod
     def from_settings(cls, settings: dict, metrics: Metrics | None = None) -> Guest:
         g = settings["guest"]
-        return cls(g["on"], g["file"], metrics)
+        return cls(g["active"], g["file"], metrics)
 
     def _load(self) -> None:
         try:
@@ -54,8 +54,8 @@ class Guest:
         except (OSError, yaml.YAMLError) as e:
             log.warning("guest: can't read %s (%s); using the default", self.path, e)
             return
-        if isinstance(saved, dict) and isinstance(saved.get("on"), bool):
-            self._on = saved["on"]
+        if isinstance(saved, dict) and isinstance(saved.get("active"), bool):
+            self._on = saved["active"]
 
     def _save(self, on: bool) -> None:
         """Atomically, so a power cut mid-write leaves the old file."""
@@ -64,7 +64,7 @@ class Guest:
         try:
             with os.fdopen(fd, "w") as f:
                 f.write("# Guest mode (SETTINGS), written by brick-panel.\n")
-                yaml.safe_dump({"on": on}, f)
+                yaml.safe_dump({"active": on}, f)
             os.replace(tmp, self.path)
         except BaseException:
             Path(tmp).unlink(missing_ok=True)

@@ -97,7 +97,7 @@ The user's rules (2026-11-23, 2026-11-24), in `night.py`, `sound.py` and
 `guest.py`. brick1982 is in the office, so it runs in **office mode** unless
 **guest mode** is switched on (SETTINGS, a tap on the STRAYLIGHT logo:
 OFFICE / GUEST; saved in `~/.config/brick-panel/guest.yaml`, the default is
-`guest.on`).
+`guest.active`).
 
 **Office mode (the default):** the screen is always on at
 `night.day_level`. A double tap sleeps it until a double tap wakes it; no

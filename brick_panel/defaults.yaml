@@ -121,11 +121,12 @@ sound:
     surprise_sign: true
 
 guest:
-  # Office or guest mode (guest.py). Office (on: false): the screen always
+  # Office or guest mode (guest.py). Office (active: false): the screen always
   # on unless a double tap sleeps it, the sound never muted on a timer. Guest
-  # (on: true): night's window and dim, and sound's quiet_hours, apply.
+  # (active: true): night's window and dim, and sound's quiet_hours, apply.
   # SETTINGS switches it; the choice is saved in file and wins.
-  on: false
+  # Not "on": YAML reads a bare on as true, the key and the value.
+  active: false
   file: ~/.config/brick-panel/guest.yaml
 
 night:
