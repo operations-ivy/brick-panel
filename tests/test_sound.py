@@ -158,3 +158,38 @@ def test_unmuted_after_sunset_until_sunrise(tmp_path):
     assert s.toggle(datetime(2026, 11, 23, 20, 0)) is False
     assert not s.muted(datetime(2026, 11, 24, 7, 9))
     assert s.muted(datetime(2026, 11, 24, 17, 5))
+
+
+class Mode:
+    """Guest mode, switched by hand."""
+
+    def __init__(self, on=False):
+        self.on = on
+
+    def __call__(self):
+        return self.on
+
+
+def test_office_mode_has_no_quiet_hours(tmp_path):
+    s = Sound(QUIET, tmp_path / "sound.yaml", guest=Mode(False))
+    assert not s.muted(datetime(2026, 11, 23, 23, 0))
+    assert s.view(datetime(2026, 11, 23, 23, 0))["quiet_window"] == ""
+
+
+def test_in_office_mode_the_button_holds(tmp_path):
+    s = Sound(QUIET, tmp_path / "sound.yaml", guest=Mode(False))
+    assert s.toggle(datetime(2026, 11, 23, 12, 0)) is True
+    assert s.muted(datetime(2026, 11, 30, 12, 0))  # past every quiet-hours edge: still muted
+
+
+def test_switching_modes_drops_the_button(tmp_path):
+    mode = Mode(False)
+    s = Sound(QUIET, tmp_path / "sound.yaml", guest=mode)
+    evening = datetime(2026, 11, 23, 21, 0)
+    assert s.toggle(evening) is True  # muted by hand in the office
+    mode.on = True
+    assert s.muted(evening)  # guest: quiet hours
+    assert s.view(evening)["quiet_window"] == QUIET["quiet_hours"]
+    assert s.toggle(evening) is False  # unmuted for the evening
+    mode.on = False
+    assert not s.muted(evening)  # office: the guest-mode flip is gone, never muted on a timer

@@ -1,7 +1,9 @@
 """When the screen is on, and the backlight. The user's rules (2026-11-23):
 a double tap always sleeps or wakes the screen; overnight it's asleep unless
 double-tapped awake, and sleeps again after a few idle minutes; woken late,
-it's dimmed (Night's docstring has the detail). The page swallows taps on a
+it's dimmed (Night's docstring has the detail). Those night rules are guest
+mode's (guest.py, 2026-11-24): in office mode, the default, the screen is
+always on unless a double tap sleeps it. The page swallows taps on a
 sleeping screen. The backlight is /sys/class/backlight, writable by the
 video group (deploy/90-backlight.rules). Either end of a window can be
 "sunset" or "sunrise", from Home Assistant's sun.sun; until Home Assistant
@@ -95,9 +97,15 @@ class Backlight:
 
 
 class Night:
-    """When the screen is on (the user, 2026-11-23):
+    """When the screen is on (the user, 2026-11-23 and 2026-11-24):
 
     - A double tap always sleeps the screen, or wakes it.
+    - Office mode (guest() false, the default on brick1982): always on at
+      day_level; a double tap sleeps it until a double tap wakes it. No
+      night, no dim, no morning wake.
+
+    Guest mode (guest() true, or no guest given) adds the night rules:
+
     - Night (window, 18:00-07:00): asleep unless woken by a double tap; a
       single tap doesn't wake it. Woken, it sleeps again idle_seconds after
       the last touch, or on a double tap.
@@ -120,6 +128,7 @@ class Night:
         now: Callable[[], datetime] = datetime.now,
         clock: Callable[[], float] = time.monotonic,
         sun: Callable[[], dict[str, dtime]] | None = None,
+        guest: Callable[[], bool] | None = None,
     ) -> None:
         self.window = parse_window(window)
         self.dim = parse_window(dim)
@@ -128,6 +137,7 @@ class Night:
         self.backlight, self.metrics = backlight, metrics
         self.now, self.clock = now, clock
         self.sun = sun or (lambda: {})  # () -> sun_times(...): Home Assistant's sunset and sunrise
+        self.guest = guest or (lambda: True)  # () -> bool: the night rules apply (guest.Guest)
         self._awake_until = 0.0  # night: awake until then
         self._asleep = False  # day: put to sleep by a double tap
         self._was_night: bool | None = None
@@ -141,15 +151,24 @@ class Night:
         backlight: Backlight | None,
         metrics: Metrics,
         sun: Callable[[], dict[str, dtime]],
+        guest: Callable[[], bool] | None = None,
     ) -> Night:
         n = settings["night"]
         return cls(
-            n["window"], n["level"], n["day_level"], n["idle_seconds"], backlight, metrics, dim=n["dim"], sun=sun
+            n["window"],
+            n["level"],
+            n["day_level"],
+            n["idle_seconds"],
+            backlight,
+            metrics,
+            dim=n["dim"],
+            sun=sun,
+            guest=guest,
         )
 
     @property
     def is_night(self) -> bool:
-        return in_window(self.window, self.now(), self.sun())
+        return self.guest() and in_window(self.window, self.now(), self.sun())
 
     def _sync_locked(self) -> bool:
         """is_night, starting each night asleep and each day awake. Call with
@@ -169,10 +188,11 @@ class Night:
 
     @property
     def level(self) -> float:
-        now, sun = self.now(), self.sun()
         if self.dark:
             return 0.0
-        return self.dim_level if in_window(self.dim, now, sun) else self.day_level
+        if self.guest() and in_window(self.dim, self.now(), self.sun()):
+            return self.dim_level
+        return self.day_level
 
     def double_tap(self) -> bool:
         """Sleep the screen, or wake it. True when it's awake now."""

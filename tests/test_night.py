@@ -156,3 +156,49 @@ def test_an_unwritable_backlight_is_left_alone(tmp_path):
     light.set(0.5)
     assert light.path is None
     assert Backlight(tmp_path / "none").path is None
+
+
+def office(now, clock=None, guest=None):
+    """The user's rules in office mode (2026-11-24)."""
+    return Night(
+        "18:00-07:00", 0.6, 1.0, 300, dim="22:00-07:00", now=now, clock=clock or Clock(), guest=guest or (lambda: False)
+    )
+
+
+def test_in_office_mode_it_is_always_on():
+    clock, now = Clock(), Now(23, 30)
+    night = office(now, clock)
+    assert not night.is_night and not night.dark
+    assert night.level == 1.0  # no dim
+    clock.t += 3600
+    assert not night.dark  # no idle sleep
+    assert night.view() == {"is_night": False, "dark": False, "awake_for": None, "idle_seconds": 300}
+
+
+def test_in_office_mode_a_double_tap_sleeps_it_until_another():
+    now = Now(17, 0)
+    night = office(now)
+    assert night.double_tap() is False
+    for hour in (18, 23, 7, 9):  # no night falls and no morning wakes it
+        now.t = at(hour)
+        assert night.dark
+    assert night.double_tap() is True
+    assert not night.dark
+
+
+class Mode:
+    def __init__(self, on):
+        self.on = on
+
+    def __call__(self):
+        return self.on
+
+
+def test_switching_to_office_at_night_wakes_it():
+    mode = Mode(True)
+    night = office(Now(23), guest=mode)
+    assert night.dark  # guest: asleep at night
+    mode.on = False
+    assert not night.dark
+    mode.on = True
+    assert night.dark  # back to guest: the night starts asleep

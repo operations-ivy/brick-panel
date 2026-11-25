@@ -93,7 +93,20 @@ uptime, and how long the state polls take.
 
 ## Night, and when the screen is on
 
-The user's rules (2026-11-23), in `night.py`:
+The user's rules (2026-11-23, 2026-11-24), in `night.py`, `sound.py` and
+`guest.py`. brick1982 is in the office, so it runs in **office mode** unless
+**guest mode** is switched on (SETTINGS, a tap on the STRAYLIGHT logo:
+OFFICE / GUEST; saved in `~/.config/brick-panel/guest.yaml`, the default is
+`guest.active`).
+
+**Office mode (the default):** the screen is always on at
+`night.day_level`. A double tap sleeps it until a double tap wakes it; no
+night, dim or morning changes that. The sound is never muted on a timer;
+the mute button mutes it until it's pressed again.
+
+**Guest mode** is the night rules below, for when the office is someone's
+bedroom. Switching to it at night puts the screen to sleep; switching back
+wakes it. Switching drops the mute button's flip.
 
 - **A double tap always sleeps the screen, or wakes it.** It counts only
   on an empty spot, not on a button, billboard or key, so nothing is
@@ -112,7 +125,8 @@ The user's rules (2026-11-23), in `night.py`:
 
 Either end of a window can be `sunset` or `sunrise` (Home Assistant's
 `sun.sun`); empty is never. The backlight level is `panel_backlight_level`
-in Prometheus, and double taps are `panel_double_taps_total`.
+in Prometheus, double taps are `panel_double_taps_total`, and the mode is
+`panel_guest_mode` (1: guest).
 
 There is no slideshow, and won't be: no photos on brick1982 (the user,
 2026-11-22).
